@@ -85,7 +85,7 @@ python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 
 ---
 woke_novel技术交流群
-![4ca47d1bb7f626ec76d675ecc2e8b030.jpg](https://1drv.ms/i/c/5fe811a9381a9b1c/IQBhyiPzhd-yQJaru0JQ2D2KAbsmnVrdmEbbqZHqG8yZFAA?e=ZCJUqJ)
+![4ca47d1bb7f626ec76d675ecc2e8b030.jpg](https://1drv.ms/i/c/5fe811a9381a9b1c/IQBhyiPzhd-yQJaru0JQ2D2KAbsmnVrdmEbbqZHqG8yZFAA?e=ZCJUqJ)](https://imgur.com/a/Ug4MmFb)
 加入我们
 
 ---

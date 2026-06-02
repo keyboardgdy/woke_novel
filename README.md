@@ -40,7 +40,8 @@
 且希望每一步都遵循一套可复用的硬约束（创作宪法、故事演化原则、流程编排、六大创意技巧）。
 
 ---
-
+不会配置？进群解决
+<img src="assets/img1.jpg" width="300" />
 
 ## 快速开始
 
@@ -89,7 +90,7 @@ python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 
 ---
 woke_novel技术交流群
-<img src="assets/img1.jpg" width="200" />
+<img src="assets/img1.jpg" width="300" />
 加入我们
 
 ---

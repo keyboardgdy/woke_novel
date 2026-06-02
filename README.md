@@ -85,7 +85,7 @@ python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 
 ---
 woke_novel技术交流群
-![4ca47d1bb7f626ec76d675ecc2e8b030.jpg](https://1drv.ms/i/c/5fe811a9381a9b1c/IQBhyiPzhd-yQJaru0JQ2D2KAbsmnVrdmEbbqZHqG8yZFAA?e=ZCJUqJ)](https://imgur.com/a/Ug4MmFb)
+<img src="assets/img1.jpg" width="200" />
 加入我们
 
 ---
@@ -264,8 +264,10 @@ woke_novel/
 > 仓库根 `CLAUDE.md` 是工具自身说明；`projects/<name>/CLAUDE.md` 是步骤 18 生成的工作流产物——两份**不要混淆**。
 
 如果好用请给我一个支持，我会持续优化更新
-![img02.jpg](https://1drv.ms/i/c/5fe811a9381a9b1c/IQC2egCDi7A0SKlZ5RWGQJdiAdgLsQ-CUHljrQ6qEyT18_k?e=7wFfdR)
-![img03.jpg](https://1drv.ms/i/c/5fe811a9381a9b1c/IQAPtKCwTSEeRbngU34JfJEqAZQ5EYCO7AcVUJ_t-xjZdHs?e=QXeXeq)
+<div align="center">
+<img src="assets/img02.jpg" width="240" />
+<img src="assets/img03.jpg" width="240" style="margin-left: 40px" />
+</div>
 
 ---
 ## 求职意向

@@ -1,0 +1,69 @@
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ====== 虚拟环境 ======
+.venv/
+venv/
+env/
+ENV/
+
+# ====== 工作流运行产物(根目录) ======
+# 只排除目录里的内容,空目录本身靠 .gitkeep 占位提交
+logs/*
+!logs/.gitkeep
+logs/*/*
+!logs/*/.gitkeep
+# 工作流跑出来的小说项目(.project_info.json 含 session UUID、CLAUDE 是项目级产物)
+projects/*
+!projects/.gitkeep
+projects/*/*
+!projects/*/.gitkeep
+
+# ====== 工具/编辑器自身配置 ======
+# Claude Code 本地配置
+.claude/
+# Obsidian 库配置
+.obsidian/
+# VS Code / Cursor
+.vscode/
+.idea/
+
+# ====== 系统 / 编辑器残留 ======
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+.tmp/
+
+# ====== 环境 / 密钥 ======
+.env
+.env.local
+*.pem
+*.key
+
+# ====== 日志 / 临时输出 ======
+*.log
+nohup.out

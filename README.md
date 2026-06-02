@@ -69,6 +69,8 @@ claude --version                                  # 验证
 cd woke_novel
 claude                                 # 确保可以正常对话
 ```
+信任小说文件夹（不可跳过，否则导致没有写入权限）
+<img src="assets/img05.png" width="500" />
 
 ### 3. 安装Python和配置环境
 

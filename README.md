@@ -44,7 +44,11 @@
 
 ## 快速开始
 
+Star是GitHub上对开源项目最直接的鼓励。😊
 
+```bash
+git clone https://github.com/keyboardgdy/woke_novel.git
+```
 **前置**：Python 3.10+ · `claude` CLI 在 `PATH`（`claude` / `claude.cmd` / `claude.bat` 任一可被 `shutil.which` 找到） · Git（可选）
 
 ### 1. 安装 Claude Code
@@ -257,6 +261,7 @@ woke_novel/
 ---
 
 ## 贡献
+祝你项目大火！⭐ 需要其他帮助随时告诉我。
 
 `steps/*.md` 的措辞、约束、变量都欢迎推敲；改完用 `python run_workflow.py single <step> -p <name> -g <g> --dry` 验证。
 加步骤需同步改 `STEP_FILES` / `STEP_NAMES` / `STEP_FILE_MAP` 三处。PR 标题前缀 `feat:` / `fix:` / `docs:` / `refactor:` / `chore:`。

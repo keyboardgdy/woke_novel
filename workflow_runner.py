@@ -276,8 +276,12 @@ class WorkflowRunner:
 
                 # 重试时强制用 --resume，让 Claude 带着上一轮上下文继续
                 effective_resume = resume or is_retry
-                session_flag = f" --session-id {session_uuid}" if not effective_resume else f" --resume {session_uuid}"
-                cmd = f'"{claude_cmd}" "@{temp_path}"{session_flag}'
+                # list 形式 + shell=False：避免 shell 引号在带空格/中文路径时翻车
+                # （macOS/Linux 由 os.execvp 直接派发，Windows 也能直接调 .cmd/.bat）
+                session_flag = ["--session-id", session_uuid] if not effective_resume else ["--resume", session_uuid]
+                cmd = [claude_cmd, f"@{temp_path}", *session_flag]
+                # 整条流水线无 TTY，必须显式跳过权限确认，否则子进程会卡在 confirm 框直到 1800s 超时
+                cmd += ["--permission-mode", "bypassPermissions"]
 
                 spinner_label = (
                     f"调用 claude（{I.STEP} {step}"
@@ -292,7 +296,7 @@ class WorkflowRunner:
                     with spinner(spinner_label, color=C.PRIMARY):
                         process = subprocess.Popen(
                             cmd,
-                            shell=True,
+                            shell=False,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             cwd=self.path_resolver.project_root,

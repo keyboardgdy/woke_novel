@@ -102,6 +102,11 @@ class ProjectInfo:
         return self._data.get("total_chapters")
 
     @property
+    def last_step_at(self) -> Optional[str]:
+        """获取最后执行步骤的时间戳(ISO 字符串)"""
+        return self._data.get("last_step_at")
+
+    @property
     def created_at(self) -> Optional[str]:
         """获取创建时间"""
         return self._data.get("created_at")

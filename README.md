@@ -86,6 +86,8 @@ window点击 menu.bat
 # 或
 python menu.py                              # 交互式菜单（推荐新手）
 # 或
+python3 menu.py
+# 或
 python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 ```
 

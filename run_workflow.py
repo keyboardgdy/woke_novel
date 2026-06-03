@@ -38,6 +38,130 @@ def _print_usage() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 共用流水线：开篇 06-10 + 按幕执行 11-16/17/18 post_17
+# ---------------------------------------------------------------------------
+# Loop 主流程和 Continue 续跑都调本函数，保证两条路径产物完全一致。
+#
+# 游标 cursor = (opening_done, start_act, start_round_in_act, skip_act_end)
+#   opening_done        — True=开篇 06-10 + create_story_summary 已完成
+#   start_act           — 从哪一幕开始（1-based）
+#   start_round_in_act  — 该幕内从第几轮开始（0-based）
+#   skip_act_end        — True=本幕（start_act）的 17 + 18 post_17 已完成
+#
+# Loop 调：cursor = (False, 1, 0, False)
+# Continue 调：根据 last_step / last_phase 算出 cursor，详见下方
+# ---------------------------------------------------------------------------
+def _run_writing_pipeline(runner, opening_done, start_act, start_round_in_act, skip_act_end):
+    chapter_counts = runner.project_info.chapter_counts or []
+    total_chapters = runner.project_info.total_chapters or 0
+    success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
+
+    if not opening_done:
+        print_section("会话 · 开篇创作", color=C.PRIMARY)
+        runner.run_session_block("opening", ["06", "07", "08", "09", "10"], act_num=1)
+        runner.extract_and_create_story_summary(1)
+
+    runner.round = 2 if not opening_done else max(2, runner.round)
+
+    for act_num in range(start_act, len(chapter_counts) + 1):
+        act_chapters = chapter_counts[act_num - 1]
+        loop_count = (act_chapters - 1) if act_num == 1 else act_chapters
+        if loop_count <= 0:
+            warn(f"第 {act_num} 幕可用轮次为 0，跳过")
+            continue
+
+        print_section(f"第 {act_num} 幕创作循环（共 {loop_count} 轮）", color=C.PRIMARY)
+
+        begin_in_act = start_round_in_act if act_num == start_act else 0
+        for loop_idx in range(begin_in_act, loop_count):
+            relative = loop_idx + 1
+            print_section(
+                f"第 {act_num} 幕 · 轮次 {relative}/{loop_count}（R{runner.round}）",
+                color=C.ACCENT,
+            )
+
+            session_name = f"round_{runner.round}"
+            if not runner.run_session_block(session_name, ["11", "12", "13", "14", "15"], act_num=act_num):
+                error("创作循环失败")
+                sys.exit(1)
+
+            runner.append_story_summary(runner.round)
+
+            if not runner.run_session_block(session_name, ["16"], act_num=act_num):
+                error("步骤 16 失败")
+                sys.exit(1)
+
+            runner.sync_summary_to_state(runner.round)
+            runner.project_info.update(current_round=runner.round)
+
+            note("继续下一轮…")
+            runner.round += 1
+
+        # 幕末 17 + 18 post_17：仅当本幕不是"已做完"形态时跑
+        if act_num == start_act and skip_act_end:
+            continue
+
+        print_section(f"步骤 17 · 第 {act_num} 幕故事梗概精简", color=C.PRIMARY)
+        if not runner.run_step(
+            "17", runner.make_display_id(f"act_{act_num}"), act_num=act_num,
+        ):
+            error("步骤 17 失败")
+            sys.exit(1)
+        runner.sync_summary_to_state(runner.round - 1)
+
+        print_section(
+            f"步骤 18 · post_17 刷新项目根 CLAUDE.md（第 {act_num} 幕后）",
+            color=C.ACCENT,
+        )
+        if not runner.run_step(
+            "18", runner.make_display_id(f"act_{act_num}"),
+            phase="post_17", act_num=act_num,
+        ):
+            warn("步骤 18 post_17 失败，不影响后续流程")
+
+
+def _compute_resume_cursor(last_step, last_phase, current_round, chapter_counts):
+    """根据断点状态算出 (_run_writing_pipeline 用的) 游标。
+
+    返回 (opening_done, start_act, start_round_in_act, skip_act_end)。
+    返回 None 表示"该断点不属于本函数管辖范围"（continue 调用方另处理）。
+    """
+    # ---- 18 post_05b：规划层完成、开篇没做 → 跑开篇
+    if last_step == "18" and last_phase == "post_05b":
+        return (False, 1, 0, False)
+
+    # ---- 开篇 06-09 中断：续跑开篇
+    if last_step in {"06", "07", "08", "09"}:
+        return (False, 1, 0, False)
+
+    # ---- 10 完成：进入循环段
+    if last_step == "10":
+        return (True, 1, 0, False)
+
+    # ---- 循环段/幕末：反推游标
+    if last_step in {"11", "12", "13", "14", "15"}:
+        completed_loops = current_round - 2  # 该轮没完成
+    elif last_step in {"16", "17"} or (last_step == "18" and last_phase == "post_17"):
+        completed_loops = current_round - 1
+    else:
+        return None
+
+    cum = 0
+    for i, cnt in enumerate(chapter_counts, start=1):
+        loop_count = (cnt - 1) if i == 1 else cnt
+        if completed_loops < cum + loop_count:
+            start_act = i
+            start_round_in_act = completed_loops - cum
+            break
+        cum += loop_count
+    else:
+        return None  # completed_loops 超出总循环段
+
+    skip_act_end = last_step == "18" and last_phase == "post_17"
+    return (True, start_act, start_round_in_act, skip_act_end)
+
+
+# ---------------------------------------------------------------------------
 # 三方确认（开篇创作会话：y / n / q）
 # ---------------------------------------------------------------------------
 def _confirm_open_session() -> str:
@@ -239,60 +363,9 @@ def main() -> None:
         runner.run_session_block("opening", ["06", "07", "08", "09", "10"], act_num=1)
         runner.extract_and_create_story_summary(1)
 
-        chapter_counts = runner.project_info.chapter_counts or []
-        total_chapters = runner.project_info.total_chapters or 0
-        success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
-
         runner.round = 2
 
-        # ========== 按幕次执行创作循环 ==========
-        for act_num, act_chapters in enumerate(chapter_counts, start=1):
-            loop_count = (act_chapters - 1) if act_num == 1 else act_chapters
-            if loop_count <= 0:
-                warn(f"第 {act_num} 幕章节数为 0，跳过")
-                continue
-
-            print_section(f"第 {act_num} 幕创作循环（共 {loop_count} 轮）", color=C.PRIMARY)
-            for loop_idx in range(loop_count):
-                relative = loop_idx + 1
-                print_section(
-                    f"第 {act_num} 幕 · 轮次 {relative}/{loop_count}（R{runner.round}）",
-                    color=C.ACCENT,
-                )
-
-                session_name = f"round_{runner.round}"
-                if not runner.run_session_block(session_name, ["11", "12", "13", "14", "15"], act_num=act_num):
-                    error("创作循环失败")
-                    sys.exit(1)
-
-                runner.append_story_summary(runner.round)
-
-                if not runner.run_session_block(session_name, ["16"], act_num=act_num):
-                    error("步骤 16 失败")
-                    sys.exit(1)
-
-                runner.sync_summary_to_state(runner.round)
-                runner.project_info.update(current_round=runner.round)
-
-                note("继续下一轮…")
-                runner.round += 1
-
-            # 幕末 17
-            print_section(f"步骤 17 · 第 {act_num} 幕故事梗概精简", color=C.PRIMARY)
-            if not runner.run_step(
-                "17", runner.make_display_id(f"act_{act_num}"), act_num=act_num,
-            ):
-                error("步骤 17 失败")
-                sys.exit(1)
-            runner.sync_summary_to_state(runner.round - 1)
-
-            # 步骤 18 post_17
-            print_section(f"步骤 18 · post_17 刷新项目根 CLAUDE.md（第 {act_num} 幕后）", color=C.ACCENT)
-            if not runner.run_step(
-                "18", runner.make_display_id(f"act_{act_num}"),
-                phase="post_17", act_num=act_num,
-            ):
-                warn("步骤 18 post_17 失败，不影响后续流程")
+        _run_writing_pipeline(runner, opening_done=True, start_act=1, start_round_in_act=0, skip_act_end=False)
 
         print_done(
             project=runner.project_name,
@@ -314,6 +387,7 @@ def main() -> None:
 
         last_step = runner.project_info.last_step
         current_round = runner.project_info.current_round
+        last_phase = runner.project_info.last_step_phase
 
         print_banner(
             f"继续执行：{runner.project_name}",
@@ -331,104 +405,63 @@ def main() -> None:
 
         chapter_counts = runner.project_info.chapter_counts or []
 
-        step_sequence = ["11", "12", "13", "14", "15", "16", "17", "18"]
-        if last_step in step_sequence:
-            idx = step_sequence.index(last_step)
-            next_steps = step_sequence[idx:]
-
-            note(f"将重新执行：{', '.join(next_steps)}")
-            if not confirm("确认继续?", default=True):
-                warn("已取消")
-                sys.exit(0)
-
-            if last_step == "15":
-                print_section("步骤 16 · 故事梗概精简", color=C.PRIMARY)
-                runner.run_session_block("condense", ["16"])
-                runner.sync_summary_to_state(current_round)
-                current_round += 1
-                runner.round = current_round
-                runner.project_info.update(current_round=current_round)
-                next_steps = ["11", "12", "13", "14", "15", "16"]
-            elif last_step == "16":
-                current_round += 1
-                runner.round = current_round
-                runner.project_info.update(current_round=current_round)
-                next_steps = ["11", "12", "13", "14", "15", "16"]
-            elif last_step == "17":
-                cumsum, current_act = 0, 1
-                for i, cnt in enumerate(chapter_counts, start=1):
-                    if current_round - 2 < cumsum + cnt:
-                        current_act = i
-                        break
-                    cumsum += cnt
-                print_section(
-                    f"步骤 18 · post_17 刷新 CLAUDE.md（第 {current_act} 幕后）",
-                    color=C.ACCENT,
-                )
-                runner.run_step(
-                    "18", runner.make_display_id(f"act_{current_act}"),
-                    phase="post_17", act_num=current_act,
-                )
-                current_round += 1
-                runner.round = current_round
-                runner.project_info.update(current_round=current_round)
-                next_steps = ["11", "12", "13", "14", "15", "16"]
-            elif last_step == "18":
-                current_round += 1
-                runner.round = current_round
-                runner.project_info.update(current_round=current_round)
-                next_steps = ["11", "12", "13", "14", "15", "16"]
-
-            print_section(f"创作循环 · 第 {current_round} 轮", color=C.PRIMARY)
-
-            total_loops = sum(chapter_counts)
-            loops_done = current_round - 2 if current_round >= 2 else 0
-            remaining_loops = total_loops - loops_done
-
-            for _ in range(max(0, remaining_loops)):
-                for idx, step in enumerate(next_steps):
-                    step_name = STEP_NAMES.get(step, step)
-                    if idx > 0:
-                        line(color=C.DIM)
-                    note(f"执行 {step} · {step_name}")
-                    if not runner.run_step(step, runner.make_display_id(f"round_{current_round}")):
-                        error(f"步骤 {step} 失败")
-                        print_panel(
-                            "中断位置",
-                            f"步骤 {step}",
-                            color=C.ERROR, icon=I.FAIL,
-                        )
-                        sys.exit(1)
-
-                if "15" in next_steps:
-                    runner.append_story_summary(current_round)
-                    print_section("步骤 16 · 故事梗概精简", color=C.PRIMARY)
-                    runner.run_session_block("condense", ["16"])
-                    runner.sync_summary_to_state(current_round)
-
-                note("继续下一轮…")
-                current_round += 1
-                runner.round = current_round
-                runner.project_info.update(current_round=current_round)
-                next_steps = ["11", "12", "13", "14", "15", "16"]
-
-            print_done(
-                project=runner.project_name,
-                extra=f"最后执行轮次 R{current_round}",
-            )
-        else:
+        # ====================================================================
+        # 1) 规划层/世界观/创意/主轴（01-05b）断点：直接重跑该 step
+        # ====================================================================
+        non_writing_steps = {
+            "01", "02", "03", "04", "05", "05a", "05b",
+        }
+        if last_step in non_writing_steps:
             step_name = STEP_NAMES.get(last_step, last_step)
             note(f"将重新执行：{last_step} {step_name}")
             if not confirm("确认继续?", default=True):
                 warn("已取消")
                 sys.exit(0)
-
             runner.run_step(last_step, runner.make_display_id(last_step))
-
             print_done(
                 project=runner.project_name,
                 extra=f"最后执行步骤 {last_step}",
             )
+            sys.exit(0)
+
+        # ====================================================================
+        # 2) 开篇/循环段/幕末断点：算出游标，调共用流水线
+        # ====================================================================
+        cursor = _compute_resume_cursor(last_step, last_phase, current_round, chapter_counts)
+        if cursor is None:
+            error(f"无法识别的循环段断点 last_step={last_step!r} last_phase={last_phase!r}")
+            sys.exit(1)
+        opening_done, start_act, start_round_in_act, skip_act_end = cursor
+
+        if not opening_done and last_step in {"06", "07", "08", "09"}:
+            note(f"检测到开篇中断 步骤 {last_step}，将续跑开篇 06-10")
+        elif not opening_done and last_step == "18" and last_phase == "post_05b":
+            note("检测到 18 (post_05b) 断点：规划层已完成，开篇 06-10 尚未开始")
+        else:
+            note(
+                f"断点定位：第 {start_act} 幕内已完成 {start_round_in_act} 轮"
+                + (" · 本幕 17/18 已完成" if skip_act_end else "")
+            )
+        if not confirm("确认继续?", default=True):
+            warn("已取消")
+            sys.exit(0)
+
+        # runner.round 对齐：开篇未做 → 2；循环段中 → current_round
+        runner.round = 2 if not opening_done else current_round
+        runner.project_info.update(current_round=1 if not opening_done else current_round)
+
+        _run_writing_pipeline(
+            runner,
+            opening_done=opening_done,
+            start_act=start_act,
+            start_round_in_act=start_round_in_act,
+            skip_act_end=skip_act_end,
+        )
+
+        print_done(
+            project=runner.project_name,
+            extra=f"创作轮次 R{runner.round - 1}",
+        )
 
     else:
         error(f"未知命令：{command}")

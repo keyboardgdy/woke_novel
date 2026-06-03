@@ -107,16 +107,33 @@ class ProjectInfo:
         return self._data.get("last_step_at")
 
     @property
+    def last_step_phase(self) -> Optional[str]:
+        """获取最后执行步骤的 phase（"post_05b" / "post_17" / None）。
+
+        主要用于 18 这种有多个调用 phase 的步骤，让 continue 能区分
+        规划层后的 18（应续跑开篇 06-10）和每幕末的 18（应续跑循环段）。
+        旧版 json 没有此字段，默认返回 None，continue 按 post_05b 兜底。
+        """
+        return self._data.get("last_step_phase")
+
+    @property
     def created_at(self) -> Optional[str]:
         """获取创建时间"""
         return self._data.get("created_at")
 
-    def mark_step_completed(self, step: str, round_num: int = 1) -> bool:
-        """标记步骤已完成"""
+    def mark_step_completed(self, step: str, round_num: int = 1, phase: str = None) -> bool:
+        """标记步骤已完成。
+
+        phase: 步骤 18 等多 phase 步骤用，区分 "post_05b" / "post_17"。
+        传 None 时不更新 last_step_phase（保持旧值）；显式传字符串（即使是
+        "post_05b" / ""）会覆盖——以便"回到主流程"时清空。
+        """
         self._data["last_step"] = step
         self._data["last_step_at"] = datetime.now().isoformat()
         if round_num > self.current_round:
             self._data["current_round"] = round_num
+        if phase is not None:
+            self._data["last_step_phase"] = phase
         return self.save()
 
     def select_option(self, option_num: int, novel_name: str = None, ref_works: str = None) -> bool:

@@ -200,7 +200,7 @@ class WorkflowRunner:
         return self.path_resolver.load_step_template(step)
 
     def resolve_prompt(self, template: str, option_index: int = None, user_description: str = "",
-                       ref_works: str = None, act_num: int = None, phase: str = "post_05b") -> str:
+                       ref_works: str = None, act_num: int = None, phase: Optional[str] = None) -> str:
         """第二层：替换 {变量} 为实际路径"""
         if option_index is None:
             option_index = self.option_index
@@ -675,7 +675,7 @@ class WorkflowRunner:
     def run_step(self, step: str, display_id: str = None,
                  session_uuid: str = None, option_index: int = None,
                  user_description: str = "", ref_works: str = None,
-                 act_num: int = None, phase: str = "post_05b") -> bool:
+                 act_num: int = None, phase: Optional[str] = None) -> bool:
         """运行单个步骤（三层流程）"""
         if display_id is None:
             display_id = self.make_display_id(step)
@@ -719,7 +719,7 @@ class WorkflowRunner:
 
             # 标记步骤完成
             if result is not None and result.returncode == 0:
-                self.project_info.mark_step_completed(step, self.round)
+                self.project_info.mark_step_completed(step, self.round, phase=phase)
                 # 如果选择了方案，同步到项目信息
                 if self.option_index:
                     self.project_info.update(

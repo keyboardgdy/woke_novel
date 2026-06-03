@@ -105,6 +105,7 @@ class PathResolver:
         result = result.replace("{macro}", p + "/00_baseline/幕次框架.md")
         result = result.replace("{constitution}", str(RULES_ROOT / "00 创作宪法.md").replace("\\", "/"))
         result = result.replace("{evolution}", str(RULES_ROOT / "00 故事演化核心原则.md").replace("\\", "/"))
+        result = result.replace("{craft_errors}", str(RULES_ROOT / "00 AI通用文字技法错误清单.md").replace("\\", "/"))
         result = result.replace("{steps}", str(RULES_ROOT).replace("\\", "/"))
 
         # ========== 04_characters 目录 ==========

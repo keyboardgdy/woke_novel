@@ -58,10 +58,14 @@ def _run_writing_pipeline(runner, opening_done, start_act, start_round_in_act, s
 
     if not opening_done:
         print_section("会话 · 开篇创作", color=C.PRIMARY)
+        # 开篇产物文件名编号是 v1（不是 v2），所以开篇期间 runner.round=1
+        runner.round = 1
         runner.run_session_block("opening", ["06", "07", "08", "09", "10"], act_num=1)
         runner.extract_and_create_story_summary(1)
 
-    runner.round = 2 if not opening_done else max(2, runner.round)
+    # 进入循环段：从 R2 开始（第 1 幕的首轮）
+    if not opening_done or runner.round < 2:
+        runner.round = 2
 
     for act_num in range(start_act, len(chapter_counts) + 1):
         act_chapters = chapter_counts[act_num - 1]
@@ -446,9 +450,13 @@ def main() -> None:
             warn("已取消")
             sys.exit(0)
 
-        # runner.round 对齐：开篇未做 → 2；循环段中 → current_round
-        runner.round = 2 if not opening_done else current_round
-        runner.project_info.update(current_round=1 if not opening_done else current_round)
+        # runner.round 对齐：
+        #   - 开篇未做 → 1（开篇产物是 v1，函数内部跑完开篇会自动跳到 2）
+        #   - 循环段中 → current_round（保持续跑游标）
+        runner.round = 1 if not opening_done else current_round
+        # current_round 在 json 里就是 1（开篇未做时）或 current_round（循环段中），无需覆盖
+        if opening_done:
+            runner.project_info.update(current_round=current_round)
 
         _run_writing_pipeline(
             runner,

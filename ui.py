@@ -331,6 +331,42 @@ def print_steps_table(steps: Sequence[Tuple[str, str]], current: Optional[str] =
     _console.print(table)
 
 
+def print_choices_table(items: Sequence[Tuple[int, str, str]], title: str,
+                         allow_custom: bool = True,
+                         custom_label: str = "自定义") -> None:
+    """编号 + 名称 + 简介 的紧凑表格，专门用于题材/频道等多选场景。
+
+    - items:  (编号, 名称, 简介) 列表，编号从调用方传，不强制从 1 起
+    - allow_custom: True 时在表格外另起一行追加 "[0] {custom_label}"，与表格内编号保持一致风格
+    """
+    _console.print()
+    table = Table(
+        title=Text(f"  {I.BOOK}  {title}", style=f"bold {C.PRIMARY}"),
+        title_justify="left",
+        border_style=C.DIM,
+        header_style=f"bold {C.PRIMARY}",
+        show_lines=False,
+        padding=(0, 1),
+        width=_BOX_WIDTH,
+    )
+    table.add_column("编号", style=f"bold {C.ACCENT}", width=4, no_wrap=True)
+    table.add_column("名称", style=f"bold {C.MUTED}", width=12, no_wrap=True)
+    table.add_column("简介", style=C.MUTED, overflow="fold")
+    for idx, name, desc in items:
+        table.add_row(
+            f"[{idx}]",
+            name,
+            Text(desc or "", style=C.DIM),
+        )
+    if allow_custom:
+        table.add_row(
+            Text("[0]", style=f"bold {C.WARNING}"),
+            Text(custom_label, style=f"bold {C.WARNING}"),
+            Text("", style=C.DIM),
+        )
+    _console.print(table)
+
+
 def print_projects_table(projects: Sequence[Dict[str, Any]], title: str = "已有项目") -> None:
     """项目列表表格：编号 + 项目名 + 题材 + 进度 + 最后活动。"""
     table = Table(
@@ -483,12 +519,27 @@ def confirm(message: str, default: bool = True) -> bool:
 
 
 def prompt(message: str, default: Optional[str] = None,
-          validator: Optional[Callable[[str], bool]] = None) -> str:
-    """文本输入（可选默认值 + 校验器）。"""
+          validator: Optional[Callable[[str], bool]] = None,
+          show_default: bool = True,
+          preface: Optional[str] = None) -> str:
+    """文本输入（可选默认值 + 校验器）。
+
+    - 默认值的回显由 rich.Prompt.ask 负责（自动在括号里展示），本函数不重复拼 [default]，
+      否则会与 rich 的 show_default 重复输出。
+    - ``show_default=False`` 时不在 ``❯`` 行后追加默认值的回显；调用方可借助
+      ``preface`` 把默认值单独打印到 ``❯`` 行上方。
+    - ``preface`` 是一段附加文本，会在 ``❯`` 行**之前**以 dim 风格单独打印一行。
+    """
     while True:
-        suffix = f" [{default}]" if default is not None else ""
         try:
-            value = Prompt.ask(f"  {I.ARROW} {message}{suffix}", console=_console, default=default)
+            if preface:
+                _console.print(f"{indent()}{preface}", style=C.DIM)
+            value = Prompt.ask(
+                f"  {I.ARROW} {message}",
+                console=_console,
+                default=default,
+                show_default=show_default,
+            )
         except EOFError:
             value = default or ""
         value = (value or "").strip()
@@ -572,7 +623,8 @@ __all__ = [
     "C", "I", "console", "init", "clear", "indent",
     "t", "stylize", "chip", "line", "blank",
     "print_banner", "print_header", "print_subheader", "print_section",
-    "print_panel", "print_kv", "print_creative_cards", "print_steps_table", "print_projects_table",
+    "print_panel", "print_kv", "print_creative_cards", "print_steps_table",
+    "print_projects_table", "print_choices_table",
     "success", "warn", "error", "info", "dim", "debug", "note",
     "step_header", "step_result", "format_elapsed", "spinner",
     "confirm", "prompt", "select", "select_project",

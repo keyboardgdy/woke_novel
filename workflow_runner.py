@@ -147,10 +147,13 @@ class WorkflowRunner:
     """工作流运行器 - 三层架构"""
 
     def __init__(self, project_name: str, genre: str = "都市", dry_run: bool = False,
-                 auto_create: bool = True, max_retries: int = 3):
+                 auto_create: bool = True, max_retries: int = 3,
+                 novel_size: str = "中篇", target_word_count: int = 300_000):
         self.project_name = project_name
         self.genre = genre
         self.dry_run = dry_run
+        self.novel_size = novel_size
+        self.target_word_count = target_word_count
         self.round = 1
         self.option_index = None  # 当前选中的创意方案编号
         self.ref_works = ""  # 从创意方案提取的参考作品，用于提示词渲染
@@ -174,19 +177,27 @@ class WorkflowRunner:
             self.project_structure.create()
 
         # 创建路径解析器
-        self.path_resolver = PathResolver(project_name, genre)
+        self.path_resolver = PathResolver(project_name, genre,
+                                          novel_size=novel_size,
+                                          target_word_count=target_word_count)
 
         # 项目信息管理
         self.project_info = ProjectInfo(project_name)
         if not self.project_info.info_file.exists():
-            self.project_info.initialize(genre)
+            self.project_info.initialize(genre, novel_size=novel_size,
+                                         target_word_count=target_word_count)
             self.genre = genre
         else:
             # 从项目信息文件读取已保存的数据
             self.genre = self.project_info.genre or genre
+            self.novel_size = self.project_info.novel_size or novel_size
+            self.target_word_count = self.project_info.target_word_count or target_word_count
             self.option_index = self.project_info.selected_option
             self.ref_works = self.project_info.ref_works or ""
             self.round = self.project_info.current_round
+            # 同步到 path_resolver（构造时已用入参建过，这里覆盖成项目档案里的值）
+            self.path_resolver.novel_size = self.novel_size
+            self.path_resolver.target_word_count = self.target_word_count
 
         # 会话管理
         self._session_uuids: Dict[str, str] = {}
@@ -200,7 +211,8 @@ class WorkflowRunner:
         return self.path_resolver.load_step_template(step)
 
     def resolve_prompt(self, template: str, option_index: int = None, user_description: str = "",
-                       ref_works: str = None, act_num: int = None, phase: Optional[str] = None) -> str:
+                       ref_works: str = None, act_num: int = None, phase: Optional[str] = None,
+                       novel_size: str = None, target_word_count: int = None) -> str:
         """第二层：替换 {变量} 为实际路径"""
         if option_index is None:
             option_index = self.option_index
@@ -208,7 +220,9 @@ class WorkflowRunner:
             ref_works = self.ref_works
         return self.path_resolver.resolve(template, round_num=self.round, option_index=option_index,
                                           user_description=user_description, ref_works=ref_works,
-                                          act_num=act_num, phase=phase)
+                                          act_num=act_num, phase=phase,
+                                          novel_size=novel_size or self.novel_size,
+                                          target_word_count=target_word_count or self.target_word_count)
 
     def _retry_backoff(self, retry_num: int) -> float:
         """第 N 次重试前的等待秒数（指数退避 2s, 4s, 8s ...）"""
@@ -675,7 +689,8 @@ class WorkflowRunner:
     def run_step(self, step: str, display_id: str = None,
                  session_uuid: str = None, option_index: int = None,
                  user_description: str = "", ref_works: str = None,
-                 act_num: int = None, phase: Optional[str] = None) -> bool:
+                 act_num: int = None, phase: Optional[str] = None,
+                 novel_size: str = None, target_word_count: int = None) -> bool:
         """运行单个步骤（三层流程）"""
         if display_id is None:
             display_id = self.make_display_id(step)
@@ -701,15 +716,16 @@ class WorkflowRunner:
             self._current_act_num = act_num
             prompt = self.resolve_prompt(template, option_index=option_index,
                                         user_description=user_description, ref_works=ref_works,
-                                        act_num=act_num, phase=phase)
+                                        act_num=act_num, phase=phase,
+                                        novel_size=novel_size, target_word_count=target_word_count)
 
             # 拼接执行指令
             prompt = (
                 "## 指令\n"
-                "立即执行以下任务，不要询问。**先分析 → 再执行 → 后自检**，不要跳过任何阶段。\n\n"
-                "自检是指生成后自我审视并改进\n\n"
-                "请优先保证生成内容的质量，而非数量。\n\n"
-                "**路径规则**：写入路径禁止任何修改。输出中提到路径时必须与指定路径完全一致。\n\n"
+                "立即执行以下任务，不要询问。先分析 → 再执行 → 后压缩，不要跳过任何阶段。\n\n"
+                "压缩：审视你的回答，删除一切对核心结论无贡献的句子\n\n"
+                "请优先保证生成内容的质量与信息密度，而非数量。\n\n"
+                "路径规则：写入路径禁止任何修改。输出路径必须与指定路径完全一致。目标文件夹已预创建，直接写入指定路径即可\n\n"
                 "---\n\n"
                 + prompt
             )

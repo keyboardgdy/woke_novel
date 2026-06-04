@@ -43,9 +43,12 @@ STEP_FILE_MAP = {
 class PathResolver:
     """路径解析器 - 将项目级变量转换为绝对路径"""
 
-    def __init__(self, project_name: str, genre: str = "都市"):
+    def __init__(self, project_name: str, genre: str = "都市",
+                 novel_size: str = "中篇", target_word_count: int = 300_000):
         self.project_name = project_name
         self.genre = genre
+        self.novel_size = novel_size
+        self.target_word_count = target_word_count
         self.project_root = PROJECTS_ROOT / project_name
 
         # 子目录（日志目录 logs/<name>/ 在仓库根，由 LOGS_ROOT 单独管理，不在这里建）
@@ -62,7 +65,8 @@ class PathResolver:
             d.mkdir(parents=True, exist_ok=True)
 
     def resolve(self, template: str, round_num: int = 1, option_index: int = None,
-                user_description: str = "", ref_works: str = "", **kwargs) -> str:
+                user_description: str = "", ref_works: str = "",
+                novel_size: str = None, target_word_count: int = None, **kwargs) -> str:
         """将模板中的路径变量替换为绝对路径
 
         支持格式：
@@ -84,6 +88,10 @@ class PathResolver:
         result = result.replace("{round-1}", prev_r)
         result = result.replace("{option_index}", opt_idx)
         result = result.replace("{user_description}", user_description)
+        result = result.replace("{novel_size}", novel_size or self.novel_size or "中篇")
+        # 渲染成中文「X万字」，方便人读；底层整数还是 target_word_count
+        _wc = target_word_count or self.target_word_count or 300_000
+        result = result.replace("{target_word_count}", f"{_wc // 10_000}万字")
         result = result.replace("{act_num}", str(kwargs.get("act_num") or ""))
         act_num = kwargs.get("act_num")
         if act_num is not None and act_num > 1:

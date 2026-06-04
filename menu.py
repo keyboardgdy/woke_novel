@@ -28,6 +28,12 @@ from ui import (
     select_project, success, warn, press_enter,
 )
 from workflow_runner import STEP_NAMES, STEP_FILES, WorkflowRunner
+import cli as cli_module
+
+# 模块级缓存：ask_user_description 拿到的值，留给 full_loop_mode 透传给子进程。
+# 一次菜单会话内只可能问一次，所以单变量够用。
+_pending_user_description: Optional[str] = None
+_pending_novel_size: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -145,12 +151,22 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
     if (_projects_root() / project).exists():
         warn(f"目录已存在: projects/{project}")
         return (None, None)
-    genre = prompt("小说题材", default="都市")
+    genre = cli_module.ask_genre()
+    user_description = cli_module.ask_user_description()
+    novel_size = cli_module.ask_novel_size()
 
     from project_info import create_project_info
-    create_project_info(project, genre)
-    WorkflowRunner(project, genre)
+    create_project_info(project, genre, novel_size=novel_size,
+                        target_word_count=cli_module.size_to_word_count(novel_size))
+    WorkflowRunner(project, genre, novel_size=novel_size,
+                   target_word_count=cli_module.size_to_word_count(novel_size))
     success(f"项目已创建: {project}")
+    info(f"补充说明：{user_description}")
+    info(f"小说规模：{novel_size}")
+
+    global _pending_user_description, _pending_novel_size
+    _pending_user_description = user_description
+    _pending_novel_size = novel_size
     return (project, genre)
 
 
@@ -210,17 +226,22 @@ def full_loop_mode() -> None:
     if not project:
         warn("项目名称不能为空。")
         return
-    genre = prompt("小说题材", default="都市")
+    genre = cli_module.ask_genre()
+    user_description = cli_module.ask_user_description()
+    novel_size = cli_module.ask_novel_size()
+    target_word_count = cli_module.size_to_word_count(novel_size)
     option_count_raw = prompt("创意方案数量", default="3")
     option_count = int(option_count_raw) if option_count_raw.isdigit() else 3
     dry_run = confirm("干运行（不实际调用 claude）?", default=False)
 
     # 配置摘要
     body = "\n".join([
-        f"项目     {project}",
-        f"题材     {genre}",
-        f"方案数   {option_count}",
-        f"干运行   {'是' if dry_run else '否'}",
+        f"项目         {project}",
+        f"题材         {genre}",
+        f"补充说明     {user_description}",
+        f"规模         {novel_size}（约 {target_word_count // 10_000} 万字）",
+        f"方案数       {option_count}",
+        f"干运行       {'是' if dry_run else '否'}",
     ])
     print_panel("执行配置", body, color=C.ACCENT, icon=I.DIAMOND)
 
@@ -233,6 +254,8 @@ def full_loop_mode() -> None:
         "--project-name", project,
         "--genre", genre,
         "--option-count", str(option_count),
+        "--user-description", user_description,
+        "--novel-size", novel_size,
     ]
     if dry_run:
         cmd.append("--dry")

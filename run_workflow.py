@@ -17,7 +17,7 @@ from ui import (
     print_panel, print_section, prompt, select, success, warn,
 )
 from cli import (
-    ask_genre, ask_project_name, ask_user_description,
+    ask_genre, ask_novel_size, ask_project_name, ask_user_description, size_to_word_count,
 )
 from workflow_runner import STEP_NAMES, WorkflowRunner
 
@@ -231,14 +231,25 @@ def main() -> None:
         sys.exit(0 if ok else 1)
 
     elif command == "init":
-        genre = ask_genre()
-        project_name = ask_project_name()
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--genre", default=None, help="小说题材（省略则交互询问）")
+        parser.add_argument("--novel-size", default=None,
+                            help="小说规模（短篇/中篇/长篇/超长篇，省略则交互询问）")
+        args = parser.parse_args(sys.argv[2:])
 
-        runner = WorkflowRunner(project_name, genre)
+        genre = args.genre or ask_genre()
+        project_name = ask_project_name()
+        novel_size = args.novel_size or ask_novel_size()
+        target_word_count = size_to_word_count(novel_size)
+
+        runner = WorkflowRunner(project_name, genre,
+                                novel_size=novel_size, target_word_count=target_word_count)
         print_panel("项目初始化完成", "", color=C.SUCCESS, icon=I.OK)
         print_kv([
             ("项目",   runner.project_name),
             ("题材",   runner.genre),
+            ("规模",   f"{novel_size}（约 {target_word_count // 10_000} 万字）"),
             ("项目目录", str(runner.path_resolver.project_root)),
         ])
         sys.exit(0)
@@ -252,18 +263,26 @@ def main() -> None:
         parser.add_argument("--project-name", default=None, help="项目名（省略则交互询问）")
         parser.add_argument("--max-retries", type=int, default=3,
                             help="失败自动重试次数（不含首次，默认 3）")
+        parser.add_argument("--user-description", default=None,
+                            help="补充说明（省略则交互询问，默认值取自 ask_genre 选中的小类 desc）")
+        parser.add_argument("--novel-size", default=None,
+                            help="小说规模（短篇/中篇/长篇/超长篇，省略则交互询问）")
         args = parser.parse_args(sys.argv[2:])
 
         genre = args.genre or ask_genre()
         project_name = args.project_name or ask_project_name()
-        user_description = ask_user_description()
+        user_description = args.user_description or ask_user_description()
+        novel_size = args.novel_size or ask_novel_size()
+        target_word_count = size_to_word_count(novel_size)
 
         runner = WorkflowRunner(project_name, genre, dry_run=args.dry,
-                                max_retries=args.max_retries)
+                                max_retries=args.max_retries,
+                                novel_size=novel_size, target_word_count=target_word_count)
 
         print_banner(
             f"项目：{runner.project_name}",
-            subtitle=f"题材 {runner.genre} · 目录 {runner.path_resolver.project_root}",
+            subtitle=f"题材 {runner.genre} · 规模 {novel_size}（约 {target_word_count // 10_000} 万字）"
+                     f" · 目录 {runner.path_resolver.project_root}",
         )
 
         # ========== 会话1: 创意方案生成 ==========

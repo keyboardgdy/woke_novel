@@ -121,6 +121,16 @@ class ProjectInfo:
         """获取创建时间"""
         return self._data.get("created_at")
 
+    @property
+    def novel_size(self) -> Optional[str]:
+        """获取小说规模档名（短篇/中篇/长篇/超长篇）。"""
+        return self._data.get("novel_size")
+
+    @property
+    def target_word_count(self) -> Optional[int]:
+        """获取目标字数（来自规模档位）。"""
+        return self._data.get("target_word_count")
+
     def mark_step_completed(self, step: str, round_num: int = 1, phase: str = None) -> bool:
         """标记步骤已完成。
 
@@ -145,11 +155,14 @@ class ProjectInfo:
             self._data["ref_works"] = ref_works
         return self.save()
 
-    def initialize(self, genre: str) -> bool:
+    def initialize(self, genre: str, novel_size: str = "中篇",
+                   target_word_count: int = 300_000) -> bool:
         """初始化项目信息"""
         self._data = {
             "project_name": self.project_name,
             "genre": genre,
+            "novel_size": novel_size,
+            "target_word_count": target_word_count,
             "created_at": datetime.now().isoformat(),
             "current_round": 1,
             "selected_option": None,
@@ -165,10 +178,12 @@ class ProjectInfo:
         return self._data.copy()
 
 
-def create_project_info(project_name: str, genre: str = "都市") -> ProjectInfo:
+def create_project_info(project_name: str, genre: str = "都市",
+                       novel_size: str = "中篇",
+                       target_word_count: int = 300_000) -> ProjectInfo:
     """创建新项目信息文件"""
     info = ProjectInfo(project_name)
-    info.initialize(genre)
+    info.initialize(genre, novel_size=novel_size, target_word_count=target_word_count)
     return info
 
 

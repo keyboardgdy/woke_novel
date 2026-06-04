@@ -82,7 +82,7 @@ pip install -r requirements.txt
 ```
 ### 4.**启动**：
 ```bash
-window点击 menu.bat
+一键启动：Window点击 menu.bat；Mac OS点击menu.command
 # 或
 python menu.py                              # 交互式菜单（推荐新手）
 # 或
@@ -126,7 +126,9 @@ python run_workflow.py continue -p my_novel
 
 # 换题材复用项目：编辑 .project_info.json 改 genre → 删 00_baseline/ 里依赖旧题材的产物 → continue
 ```
-
+---
+新增题材选择功能 （日期6.4更新）
+![题材选择功能展示](assets/img07.png)
 ---
 ## 核心特性
 

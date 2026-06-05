@@ -6,6 +6,7 @@ woke_novel 主菜单（单步 / 完整 / 继续 / 步骤列表）。
 所有显示都委托给 ui 模块；本文件只负责交互编排。
 """
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +42,36 @@ _pending_novel_size: Optional[str] = None
 # ---------------------------------------------------------------------------
 def _projects_root() -> Path:
     return Path(__file__).parent / "projects"
+
+
+def _logs_root() -> Path:
+    return Path(__file__).parent / "logs"
+
+
+def _is_direct_child(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return False
+    return path.parent.resolve() == parent.resolve()
+
+
+def prompt_new_project_name(message: str = "新项目名称", default: Optional[str] = None) -> str:
+    current_message = message
+    current_default = default
+    while True:
+        project = prompt(current_message, default=current_default).strip()
+        if not project:
+            warn("项目名称不能为空，请重新输入。")
+            current_message = "重新输入项目名称"
+            current_default = None
+            continue
+        if (_projects_root() / project).exists():
+            warn(f"项目已存在: projects/{project}，请重新输入。")
+            current_message = "重新输入项目名称"
+            current_default = None
+            continue
+        return project
 
 
 def list_existing_projects() -> List[Dict[str, Any]]:
@@ -144,13 +175,7 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
 
     # 创建新项目
     print_section("创建新项目", color=C.ACCENT)
-    project = prompt("新项目名称")
-    if not project:
-        warn("项目名称不能为空。")
-        return (None, None)
-    if (_projects_root() / project).exists():
-        warn(f"目录已存在: projects/{project}")
-        return (None, None)
+    project = prompt_new_project_name()
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
     novel_size = cli_module.ask_novel_size()
@@ -222,10 +247,7 @@ def full_loop_mode() -> None:
     clear()
     print_banner("完整执行", subtitle="一键跑完 创意 → 世界观 → 主轴 → 正文")
 
-    project = prompt("项目名称", default="my_novel")
-    if not project:
-        warn("项目名称不能为空。")
-        return
+    project = prompt_new_project_name("项目名称", default="my_novel")
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
     novel_size = cli_module.ask_novel_size()
@@ -299,6 +321,66 @@ def continue_mode() -> None:
 
     cmd = [sys.executable, "run_workflow.py", "continue", "--project-name", project]
     subprocess.run(cmd)
+    press_enter()
+
+
+# ---------------------------------------------------------------------------
+# 删除项目
+# ---------------------------------------------------------------------------
+def delete_project_mode() -> None:
+    """删除小说项目目录和对应日志目录。"""
+    clear()
+    print_banner("删除项目", subtitle="删除 projects/<项目名> 和 logs/<项目名>", accent=C.ERROR)
+
+    projects = list_existing_projects()
+    if not projects:
+        warn("暂无已有项目。")
+        press_enter()
+        return
+
+    idx = select_project(projects, allow_new=False)
+    if idx is None:
+        return
+    project_name = idx
+
+    project_path = _projects_root() / project_name
+    log_path = _logs_root() / project_name
+    targets = [path for path in (project_path, log_path) if path.exists()]
+
+    print_subheader(f"项目：{project_name}", color=C.ERROR)
+    print_kv([
+        ("项目目录", str(project_path) if project_path.exists() else f"{project_path}（不存在）"),
+        ("日志目录", str(log_path) if log_path.exists() else f"{log_path}（不存在）"),
+    ])
+
+    if not targets:
+        warn("项目目录和日志目录都不存在，无需删除。")
+        press_enter()
+        return
+
+    for path in targets:
+        parent = _projects_root() if path == project_path else _logs_root()
+        if not path.is_dir() or not _is_direct_child(path, parent):
+            error(f"拒绝删除异常路径: {path}")
+            press_enter()
+            return
+
+    warn("此操作会永久删除项目产物和运行日志，无法从菜单内恢复。")
+    if not confirm("确认删除该项目?", default=False):
+        warn("已取消。")
+        press_enter()
+        return
+
+    typed = prompt("请输入项目名以确认删除", show_default=False)
+    if typed != project_name:
+        error("项目名不匹配，已取消删除。")
+        press_enter()
+        return
+
+    for path in targets:
+        shutil.rmtree(path)
+        success(f"已删除: {path}")
+
     press_enter()
 
 
@@ -485,11 +567,12 @@ def main() -> None:
             "继续执行   从中断点接续",
             "查看步骤   步骤编号 + 中文名",
             "导出小说   合并 02_output 导出 md/txt/epub",
+            "删除项目   删除小说项目和对应日志",
             "退出",
         ]
         idx = select("主菜单", options, default=0)
-        actions = [single_step_mode, full_loop_mode, continue_mode, view_steps_list, export_mode]
-        if idx == 5:
+        actions = [single_step_mode, full_loop_mode, continue_mode, view_steps_list, export_mode, delete_project_mode]
+        if idx == 6:
             print_panel("再见", "下次再写！", color=C.ACCENT, icon=I.STAR)
             break
         try:

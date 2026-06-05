@@ -481,12 +481,14 @@ def main() -> None:
         parser.add_argument("-g", "--genre", default="都市")
         parser.add_argument("-p", "--project-name", default="test_project")
         parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+                            help="CLI 后端（默认 claude）")
         parser.add_argument("--max-retries", type=int, default=3,
                             help="失败自动重试次数（不含首次，默认 3）")
         args = parser.parse_args(sys.argv[2:])
 
         runner = WorkflowRunner(args.project_name, args.genre, dry_run=args.dry,
-                                max_retries=args.max_retries)
+                                max_retries=args.max_retries, provider=args.provider)
         display_id = runner.make_display_id(args.step)
         ok = runner.run_step(args.step, display_id)
         sys.exit(0 if ok else 1)
@@ -505,12 +507,14 @@ def main() -> None:
         parser.add_argument("-g", "--genre", default="都市")
         parser.add_argument("-p", "--project-name", default="test_project")
         parser.add_argument("--dry", action="store_true")
+        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+                            help="CLI 后端（默认 claude）")
         parser.add_argument("--max-retries", type=int, default=3,
                             help="失败自动重试次数（不含首次，默认 3）")
         args, unknown = parser.parse_known_args(sys.argv[4:])
 
         runner = WorkflowRunner(args.project_name, args.genre, dry_run=args.dry,
-                                max_retries=args.max_retries)
+                                max_retries=args.max_retries, provider=args.provider)
         ok = runner.run_session_block(block_name, steps)
         sys.exit(0 if ok else 1)
 
@@ -542,6 +546,8 @@ def main() -> None:
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+                            help="CLI 后端（默认 claude）")
         parser.add_argument("--option-count", type=int, default=3, help="创意方案生成数量")
         parser.add_argument("--genre", default=None, help="小说题材（省略则交互询问）")
         parser.add_argument("--project-name", default=None, help="项目名（省略则交互询问）")
@@ -561,12 +567,13 @@ def main() -> None:
 
         runner = WorkflowRunner(project_name, genre, dry_run=args.dry,
                                 max_retries=args.max_retries,
-                                novel_size=novel_size, target_word_count=target_word_count)
+                                novel_size=novel_size, target_word_count=target_word_count,
+                                provider=args.provider)
 
         print_banner(
             f"项目：{runner.project_name}",
             subtitle=f"题材 {runner.genre} · 规模 {novel_size}（约 {target_word_count // 10_000} 万字）"
-                     f" · 目录 {runner.path_resolver.project_root}",
+                     f" · 后端 {runner.provider} · 目录 {runner.path_resolver.project_root}",
         )
 
         run_workflow_from_cursor(
@@ -584,6 +591,8 @@ def main() -> None:
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+                            help="CLI 后端（默认 claude）")
         parser.add_argument("--project-name", default=None, help="项目名（省略则交互询问）")
         parser.add_argument("--max-retries", type=int, default=3,
                             help="失败自动重试次数（不含首次，默认 3）")
@@ -591,7 +600,7 @@ def main() -> None:
 
         project_name = args.project_name or ask_project_name()
         runner = WorkflowRunner(project_name, dry_run=args.dry,
-                                max_retries=args.max_retries)
+                                max_retries=args.max_retries, provider=args.provider)
 
         last_step = runner.project_info.last_step
         current_round = runner.project_info.current_round
@@ -599,7 +608,7 @@ def main() -> None:
 
         print_banner(
             f"继续执行：{runner.project_name}",
-            subtitle=f"当前轮次 R{current_round} · 上次中断 步骤 {last_step or '无'}",
+            subtitle=f"当前轮次 R{current_round} · 后端 {runner.provider} · 上次中断 步骤 {last_step or '无'}",
         )
 
         if last_step is None:

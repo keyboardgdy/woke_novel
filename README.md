@@ -1,5 +1,5 @@
 # woke_novel
-全自动小说生成工具，**让 Claude 成为你的「中文网文自动生成工具」** *流水线 · 多幕 · 断点续写 · 强约束模板驱动*;Fully Automated Novel Generation Tool, Making Claude Your "Chinese Web Novel Auto-Wenerator";
+全自动小说生成工具，**让 Claude / Codex 成为你的「中文网文自动生成工具」** *流水线 · 多幕 · 断点续写 · 强约束模板驱动*;Fully Automated Novel Generation Tool, Making Claude/Codex Your "Chinese Web Novel Auto-Generator";
 
 <div align="center">
 
@@ -14,14 +14,14 @@
       ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═══╝ ╚═════╝   ╚═══╝  ╚══════╝╚══════╝
 ```
 
-**让 Claude 成为你的「中文网文自动生成工具」**
+**让 Claude / Codex 成为你的「中文网文自动生成工具」**
 *流水线 · 多幕 · 断点续写 · 强约束模板驱动*
 
 <br/>
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2E2E2E)](#)
-[![Powered%20By](https://img.shields.io/badge/Powered%20By-Claude%20CLI-D97757)](#)
+[![Powered%20By](https://img.shields.io/badge/Powered%20By-Claude%20CLI%20%7C%20Codex%20CLI-D97757)](#)
 [![Mode](https://img.shields.io/badge/Mode-Dry%20Run%20Supported-7C3AED)](#)
 [![License](https://img.shields.io/badge/License-MIT-0F172A)](#)
 
@@ -31,8 +31,8 @@
 
 ## **woke_novel**是什么
 
-**woke_novel** 把 `claude` CLI 变成一条「中文网文联合创作流水线」。
-工具本身不写一个字——它按顺序把 `steps/` 下的 20 份硬约束 Markdown 模板喂给 `claude` 子进程，
+**woke_novel** 把 `claude` CLI 或 `codex` CLI 变成一条「中文网文联合创作流水线」。
+工具本身不写一个字——它按顺序把 `steps/` 下的 20 份硬约束 Markdown 模板喂给外部 CLI 子进程，
 让大模型把每一步产物（创意 → 世界观 → 人物 → 主轴 → 剧情 → 正文 → 状态）规规矩矩地落到
 `projects/<小说名>/` 对应目录里，全程可断点续跑。
 
@@ -50,24 +50,31 @@ Star是GitHub上对开源项目最直接的鼓励。😊
 ```bash
 git clone https://github.com/keyboardgdy/woke_novel.git
 ```
-**前置**：Python 3.10+ · `claude` CLI 在 `PATH`（`claude` / `claude.cmd` / `claude.bat` 任一可被 `shutil.which` 找到） · Git（可选）
+**前置**：Python 3.10+ · `claude` CLI 或 `codex` CLI 在 `PATH`（Windows 下 `.cmd` / `.bat` 也可） · Git（可选）
 
-### 1. 安装 Claude Code
+### 1. 安装模型 CLI
 
-可参考 [Claude Code 文档](https://code.claude.com/docs/en/setup) 进行安装。
+本工具支持两种后端，进入 `menu.py` 后会先让你选择：
+
+- **Claude CLI**：使用 `claude` / `claude.cmd`
+- **Codex CLI**：使用 `codex` / `codex.cmd`
+
+至少安装并登录其中一种即可。Claude 可参考 [Claude Code 文档](https://code.claude.com/docs/en/setup)；Codex 请按 OpenAI Codex CLI 的安装方式配置，并确认命令在 PATH 中可用。
 
 ```bash
 git clone https://github.com/keyboardgdy/woke_novel.git
 cd woke_novel
-claude --version                                  # 验证
+claude --version                                  # 验证 Claude CLI
+codex --version                                   # 验证 Codex CLI
 ```
-### 2. 配置模型API
+### 2. 配置模型 API
 
-[cc-switch](https://github.com/farion1231/cc-switch) 是一个便捷的工具，可以快速切换 Claude Code 的 API 配置。
+[cc-switch](https://github.com/farion1231/cc-switch) 是一个便捷的工具，可以快速切换 Claude Code 的 API 配置。使用 Codex CLI 时，请确保 Codex 已完成登录或 API 配置。
 
 ```bash
 cd woke_novel
 claude                                 # 确保可以正常对话
+codex                                  # 如果选择 Codex，也先确认可以正常对话
 ```
 信任小说文件夹（不可跳过，否则导致没有写入权限）
 
@@ -91,7 +98,18 @@ python3 menu.py
 python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 ```
 
-第一次跑会引导：选题材 → 输项目名 → 输用户描述（可选）→ 确认开篇 → 自动跑完全流程。
+第一次进入菜单会先选择 Claude CLI 或 Codex CLI，之后引导：选题材 → 输项目名 → 输用户描述（可选）→ 确认开篇 → 自动跑完全流程。
+
+### 后端与自动批准
+
+工作流会把每一步 prompt 投喂给外部 CLI 子进程，并要求模型直接把产物写入 `projects/<小说名>/`。为了避免非交互式流水线卡在权限确认界面，当前实现会自动跳过 CLI 审批：
+
+| 后端 | 当前调用方式 | 说明 |
+| --- | --- | --- |
+| Claude CLI | `--permission-mode bypassPermissions` | 跳过 Claude 的权限确认，保持流水线无人值守执行 |
+| Codex CLI | `--dangerously-bypass-approvals-and-sandbox` | 跳过 Codex 审批并关闭 Codex 沙箱，适合已信任的本地项目环境 |
+
+如果你希望 Codex 更保守运行，可以在 `workflow_runner.py` 里把 Codex 参数改为 `--ask-for-approval never --sandbox workspace-write`。这样仍不弹审批确认，但会保留工作区写入沙箱。
 
 ---
 woke_novel技术交流群
@@ -108,10 +126,10 @@ python run_workflow.py <command> [args]
 | 命令 | 用途 | 关键参数 |
 | --- | --- | --- |
 | `init` | 交互式建项目 | — |
-| `loop` | 跑完整流水线 | `-p <name>` · `-g <genre>` · `--option-count` (默认 3) · `--dry` |
-| `continue` | 从 `.project_info.json` 的 `last_step` 续跑 | `-p <name>` · `--dry` |
-| `single <step>` | 跑单个步骤（改完模板后单步验证） | `-p` · `-g` · `--max-retries` (默认 3) · `--dry` |
-| `session <block> <s1,s2,...>` | 在**一个** Claude session 里顺序跑一组步骤 | `-p` · `-g` · `--dry` |
+| `loop` | 跑完整流水线 | `-p <name>` · `-g <genre>` · `--provider claude/codex` · `--option-count` (默认 3) · `--dry` |
+| `continue` | 从 `.project_info.json` 的 `last_step` 续跑 | `-p <name>` · `--provider claude/codex` · `--dry` |
+| `single <step>` | 跑单个步骤（改完模板后单步验证） | `-p` · `-g` · `--provider claude/codex` · `--max-retries` (默认 3) · `--dry` |
+| `session <block> <s1,s2,...>` | 在**一个** CLI session 里顺序跑一组步骤 | `-p` · `-g` · `--provider claude/codex` · `--dry` |
 
 **常用场景**
 
@@ -120,6 +138,9 @@ python run_workflow.py <command> [args]
 python run_workflow.py single 11 -p my_novel -g 玄幻 --dry
 # 没问题再去掉 --dry 真跑
 python run_workflow.py single 11 -p my_novel -g 玄幻
+
+# 使用 Codex CLI 后端
+python run_workflow.py single 11 -p my_novel -g 玄幻 --provider codex
 
 # 中途 Ctrl+C 或断电后接上
 python run_workflow.py continue -p my_novel
@@ -133,12 +154,12 @@ python run_workflow.py continue -p my_novel
 ## 核心特性
 
 - **流水线编排** — 20 步按 `创意 → 世界 → 主轴 → 开篇 → 循环创作 → 幕末` 一气呵成；
-  按 `display_id` 切片到 6 个 Claude session，跨会话严格隔离，同一会话可 `--resume` 续聊
+  按 `display_id` 切片到 6 个 CLI session，跨会话严格隔离，同一会话尽量续接上下文
 - **断点续写** — 进度落在 `projects/<name>/.project_info.json`；`continue` 模式只续循环段，不重做已完成的世界观与主轴
 - **强约束模板** — 4 份「宪法级」Markdown（创作宪法 / 故事演化原则 / 流程编排 / 六大创意技巧）在每步 prompt 头部注入
 - **变量插值** — `{project}` / `{baseline}` / `{round}` / `{act_num}` / `{act_skeleton}` 等十余个变量由 `PathResolver.resolve()` 统一替换，模板里**绝无硬编码绝对路径**
 - **多幕循环** — 自动从 `幕次框架.md` 抽幕数与每幕章节数；开篇消耗 1 章后第一幕跑 `act_chapters − 1` 轮，其余幕按完整章节数循环
-- **干运行模式** — `--dry` 下完全不调 `claude`，每步返回伪造产物并落占位文件，方便没装 Claude 的环境做联调
+- **干运行模式** — `--dry` 下完全不调外部 CLI，每步返回伪造产物并落占位文件，方便没装模型 CLI 的环境做联调
 
 ---
 
@@ -153,7 +174,7 @@ python run_workflow.py continue -p my_novel
                                                   │
                        ┌──────────┬───────────────┼───────────────┐
                        ▼          ▼               ▼               ▼
-                  path_resolver  project_info   steps/*.md    claude CLI
+                  path_resolver  project_info   steps/*.md    CLI provider
                   (变量替换)     (断点 JSON)    (20 份模板)   (子进程 1800s)
 ```
 
@@ -174,7 +195,7 @@ python run_workflow.py continue -p my_novel
 
 ## 流水线
 
-完整 `loop` 走完一次约 18 步，按 Claude session 切成 6 段：
+完整 `loop` 走完一次约 18 步，按 CLI session 切成 6 段：
 
 ```
   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐

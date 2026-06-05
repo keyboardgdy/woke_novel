@@ -35,6 +35,27 @@ import cli as cli_module
 # 一次菜单会话内只可能问一次，所以单变量够用。
 _pending_user_description: Optional[str] = None
 _pending_novel_size: Optional[str] = None
+_current_provider: str = "claude"
+
+
+def _provider_label(provider: Optional[str] = None) -> str:
+    value = (provider or _current_provider or "claude").lower()
+    return "Codex CLI" if value == "codex" else "Claude CLI"
+
+
+def choose_provider() -> str:
+    """菜单启动时选择外部 CLI 后端。"""
+    clear()
+    print_banner("woke_novel 工作流", subtitle="选择模型 CLI 后端")
+    idx = select(
+        "使用哪种架构",
+        [
+            "Claude CLI   使用 claude / claude.cmd",
+            "Codex CLI    使用 codex / codex.cmd",
+        ],
+        default=0,
+    )
+    return "codex" if idx == 1 else "claude"
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +205,8 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
     create_project_info(project, genre, novel_size=novel_size,
                         target_word_count=cli_module.size_to_word_count(novel_size))
     WorkflowRunner(project, genre, novel_size=novel_size,
-                   target_word_count=cli_module.size_to_word_count(novel_size))
+                   target_word_count=cli_module.size_to_word_count(novel_size),
+                   provider=_current_provider)
     success(f"项目已创建: {project}")
     info(f"补充说明：{user_description}")
     info(f"小说规模：{novel_size}")
@@ -206,7 +228,7 @@ def single_step_mode() -> None:
     project, genre = result
 
     clear()
-    print_banner("单步执行", subtitle=f"项目 {project} · 题材 {genre}")
+    print_banner("单步执行", subtitle=f"项目 {project} · 题材 {genre} · 后端 {_provider_label()}")
     print_subheader("项目信息", color=C.PRIMARY)
     print_kv(_project_kv(project))
 
@@ -217,12 +239,12 @@ def single_step_mode() -> None:
         warn("无效步骤编号。")
         return
 
-    dry_run = confirm("干运行（不实际调用 claude）?", default=False)
+    dry_run = confirm(f"干运行（不实际调用 {_provider_label()}）?", default=False)
     option_count_raw = prompt("创意方案数量", default="3")
     option_count = int(option_count_raw) if option_count_raw.isdigit() else 3
 
     print_section(f"执行 步骤 {step}  {STEP_NAMES[step]}", color=C.PRIMARY)
-    runner = WorkflowRunner(project, genre, dry_run=dry_run)
+    runner = WorkflowRunner(project, genre, dry_run=dry_run, provider=_current_provider)
 
     if step == "01" and option_count > 1:
         for i in range(option_count):
@@ -254,7 +276,7 @@ def full_loop_mode() -> None:
     target_word_count = cli_module.size_to_word_count(novel_size)
     option_count_raw = prompt("创意方案数量", default="3")
     option_count = int(option_count_raw) if option_count_raw.isdigit() else 3
-    dry_run = confirm("干运行（不实际调用 claude）?", default=False)
+    dry_run = confirm(f"干运行（不实际调用 {_provider_label()}）?", default=False)
 
     # 配置摘要
     body = "\n".join([
@@ -263,6 +285,7 @@ def full_loop_mode() -> None:
         f"补充说明     {user_description}",
         f"规模         {novel_size}（约 {target_word_count // 10_000} 万字）",
         f"方案数       {option_count}",
+        f"后端         {_provider_label()}",
         f"干运行       {'是' if dry_run else '否'}",
     ])
     print_panel("执行配置", body, color=C.ACCENT, icon=I.DIAMOND)
@@ -278,6 +301,7 @@ def full_loop_mode() -> None:
         "--option-count", str(option_count),
         "--user-description", user_description,
         "--novel-size", novel_size,
+        "--provider", _current_provider,
     ]
     if dry_run:
         cmd.append("--dry")
@@ -319,7 +343,11 @@ def continue_mode() -> None:
         warn("已取消。")
         return
 
-    cmd = [sys.executable, "run_workflow.py", "continue", "--project-name", project]
+    cmd = [
+        sys.executable, "run_workflow.py", "continue",
+        "--project-name", project,
+        "--provider", _current_provider,
+    ]
     subprocess.run(cmd)
     press_enter()
 
@@ -556,10 +584,12 @@ def export_mode() -> None:
 # 主菜单
 # ---------------------------------------------------------------------------
 def main() -> None:
+    global _current_provider
     init()
+    _current_provider = choose_provider()
     while True:
         clear()
-        print_banner("woke_novel 工作流", subtitle="中文网文 · Claude CLI 驱动")
+        print_banner("woke_novel 工作流", subtitle=f"中文网文 · {_provider_label()} 驱动")
         print_subheader("请选择功能", color=C.PRIMARY)
         options = [
             "单步执行   跑一个指定步骤（试运行 / 修复）",

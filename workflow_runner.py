@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 import re
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -148,10 +149,12 @@ class WorkflowRunner:
 
     def __init__(self, project_name: str, genre: str = "都市", dry_run: bool = False,
                  auto_create: bool = True, max_retries: int = 3,
-                 novel_size: str = "中篇", target_word_count: int = 300_000):
+                 novel_size: str = "中篇", target_word_count: int = 300_000,
+                 provider: str = "claude"):
         self.project_name = project_name
         self.genre = genre
         self.dry_run = dry_run
+        self.provider = self._normalize_provider(provider)
         self.novel_size = novel_size
         self.target_word_count = target_word_count
         self.round = 1
@@ -228,9 +231,17 @@ class WorkflowRunner:
         """第 N 次重试前的等待秒数（指数退避 2s, 4s, 8s ...）"""
         return self._retry_backoff_base * (2 ** (retry_num - 1))
 
+    @staticmethod
+    def _normalize_provider(provider: str) -> str:
+        """规范化 CLI 后端名称。"""
+        normalized = (provider or "claude").strip().lower()
+        if normalized not in {"claude", "codex"}:
+            raise ValueError(f"不支持的 CLI 后端: {provider}（可选: claude / codex）")
+        return normalized
+
     def execute_step(self, step: str, prompt: str, display_id: str,
                      session_uuid: str = None, resume: bool = False) -> Optional[subprocess.CompletedProcess]:
-        """第三层：调用 claude CLI 执行
+        """第三层：调用外部 CLI 后端执行
 
         resume: 是否使用 --resume 继续已有会话
 
@@ -248,13 +259,13 @@ class WorkflowRunner:
             note(f"干运行 · 模板 {STEP_FILES.get(step, 'unknown')}")
             dry_result = self._dry_result()
             self._log_step(step, prompt, [(dry_result, 1)], display_id, session_uuid)
-            step_result(True, message="(干运行) 已跳过 claude 调用")
+            step_result(True, message=f"(干运行) 已跳过 {self.provider} 调用")
             return dry_result
 
-        # 检查 claude 命令
-        claude_cmd = self._find_claude_command()
-        if not claude_cmd:
-            error("找不到 'claude' 命令（请确认 PATH 上有 claude / claude.cmd / claude.bat）")
+        # 检查外部 CLI 命令
+        cli_cmd = self._find_cli_command(self.provider)
+        if not cli_cmd:
+            error(self._missing_cli_message(self.provider))
             return None
 
         # 临时文件传递 prompt
@@ -267,16 +278,18 @@ class WorkflowRunner:
             temp_file.close()
 
             class _AttemptResult:
-                def __init__(self, returncode, stdout, stderr, elapsed, timed_out):
+                def __init__(self, returncode, stdout, stderr, elapsed, timed_out, session_id=None):
                     self.returncode = returncode
                     self.stdout = stdout
                     self.stderr = stderr
                     self.elapsed = elapsed
                     self.timed_out = timed_out
+                    self.session_id = session_id
 
             max_attempts = self.max_retries + 1  # 首次 + N 次重试
             attempts: List[tuple] = []
             result: Optional[_AttemptResult] = None
+            effective_session_uuid = session_uuid if self.provider == "claude" or resume else None
 
             for attempt in range(1, max_attempts + 1):
                 is_retry = attempt > 1
@@ -288,22 +301,21 @@ class WorkflowRunner:
                     )
                     time.sleep(backoff)
 
-                # 重试时强制用 --resume，让 Claude 带着上一轮上下文继续
+                # 重试时强制续接上下文；Codex 首次执行后会尽量从 JSONL 输出解析真实 session id。
                 effective_resume = resume or is_retry
-                # list 形式 + shell=False：避免 shell 引号在带空格/中文路径时翻车
-                # （macOS/Linux 由 os.execvp 直接派发，Windows 也能直接调 .cmd/.bat）
-                session_flag = ["--session-id", session_uuid] if not effective_resume else ["--resume", session_uuid]
-                cmd = [claude_cmd, f"@{temp_path}", *session_flag]
-                # 整条流水线无 TTY，必须显式跳过权限确认，否则子进程会卡在 confirm 框直到 1800s 超时
-                cmd += ["--permission-mode", "bypassPermissions"]
+                if self.provider == "codex" and not effective_session_uuid:
+                    effective_resume = False
+                cmd, stdin_payload = self._build_cli_command(
+                    cli_cmd, temp_path, prompt, effective_session_uuid, effective_resume
+                )
 
                 spinner_label = (
-                    f"调用 claude（{I.STEP} {step}"
+                    f"调用 {self.provider}（{I.STEP} {step}"
                     + (f" · 重试 {attempt - 1}" if is_retry else "")
                     + "）"
                 )
 
-                # 调用 claude，期间显示 spinner + elapsed
+                # 调用外部 CLI，期间显示 spinner + elapsed
                 start = time.monotonic()
                 timed_out = False
                 try:
@@ -313,10 +325,12 @@ class WorkflowRunner:
                             shell=False,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
+                            stdin=subprocess.PIPE if stdin_payload is not None else None,
                             cwd=self.path_resolver.project_root,
                         )
                         try:
-                            stdout, stderr = process.communicate(timeout=1800)
+                            input_bytes = stdin_payload.encode("utf-8") if stdin_payload is not None else None
+                            stdout, stderr = process.communicate(input=input_bytes, timeout=1800)
                         except subprocess.TimeoutExpired:
                             process.kill()
                             stdout, stderr = process.communicate()
@@ -334,6 +348,12 @@ class WorkflowRunner:
                     elapsed=elapsed,
                     timed_out=timed_out,
                 )
+                if self.provider == "codex":
+                    parsed_session_id = self._extract_codex_session_id(result.stdout)
+                    if parsed_session_id:
+                        result.session_id = parsed_session_id
+                        effective_session_uuid = parsed_session_id
+                        self._session_uuids[display_id] = parsed_session_id
                 attempts.append((result, attempt))
 
                 if result.returncode == 0:
@@ -369,6 +389,7 @@ class WorkflowRunner:
             stderr = ""
             elapsed = 0.0
             timed_out = False
+            session_id = None
         return DryResult()
 
     def _log_step(self, step: str, prompt: str, attempts: List[tuple], display_id: str, session_uuid: str):
@@ -392,6 +413,7 @@ class WorkflowRunner:
             f.write(f"轮次: {self.round}\n")
             f.write(f"幕次: {self._current_act_num or 'N/A'}\n")
             f.write(f"显示ID: {display_id}\n")
+            f.write(f"CLI后端: {self.provider}\n")
             f.write(f"会话UUID: {session_uuid}\n")
             f.write(f"时间: {datetime.now().isoformat()}\n")
             f.write(f"尝试次数: {len(attempts)}\n")
@@ -406,6 +428,8 @@ class WorkflowRunner:
                 f.write(f"耗时: {result.elapsed:.2f}s\n")
                 if getattr(result, 'timed_out', False):
                     f.write(f"超时: 是\n")
+                if getattr(result, 'session_id', None):
+                    f.write(f"CLI会话ID: {result.session_id}\n")
                 if result.stdout:
                     f.write(f"\n--- Stdout ({len(result.stdout)} chars) ---\n")
                     f.write(result.stdout)
@@ -413,17 +437,83 @@ class WorkflowRunner:
                     f.write(f"\n--- Stderr ---\n")
                     f.write(result.stderr)
 
-    def _find_claude_command(self) -> Optional[str]:
-        """查找 claude 命令"""
+    def _build_cli_command(self, cli_cmd: str, temp_path: str, prompt: str,
+                           session_uuid: str, resume: bool) -> tuple[List[str], Optional[str]]:
+        """构造指定后端的命令行。"""
+        if self.provider == "claude":
+            # list 形式 + shell=False：避免 shell 引号在带空格/中文路径时翻车。
+            session_flag = ["--session-id", session_uuid] if not resume else ["--resume", session_uuid]
+            cmd = [cli_cmd, f"@{temp_path}", *session_flag]
+            # 整条流水线无 TTY，必须显式跳过权限确认，否则子进程会卡在 confirm 框直到 1800s 超时。
+            cmd += ["--permission-mode", "bypassPermissions"]
+            return cmd, None
+
+        cmd = [
+            cli_cmd, "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+        ]
+        if resume and session_uuid:
+            cmd = [
+                cli_cmd, "exec", "resume",
+                "--json",
+                "--skip-git-repo-check",
+                "--dangerously-bypass-approvals-and-sandbox",
+                session_uuid,
+            ]
+        cmd.append("-")
+        return cmd, prompt
+
+    def _find_cli_command(self, provider: str) -> Optional[str]:
+        """查找外部 CLI 命令"""
         import shutil
-        cmd = shutil.which("claude")
+        cmd = shutil.which(provider)
         if cmd:
             return cmd
         if os.name == 'nt':
-            for name in ["claude.cmd", "claude.bat"]:
+            for name in [f"{provider}.cmd", f"{provider}.bat"]:
                 cmd = shutil.which(name)
                 if cmd:
                     return cmd
+        return None
+
+    def _missing_cli_message(self, provider: str) -> str:
+        if provider == "codex":
+            return "找不到 'codex' 命令（请确认 PATH 上有 codex / codex.cmd / codex.bat）"
+        return "找不到 'claude' 命令（请确认 PATH 上有 claude / claude.cmd / claude.bat）"
+
+    def _extract_codex_session_id(self, stdout: str) -> Optional[str]:
+        """从 Codex `--json` JSONL 输出中尽量解析 session id。"""
+        if not stdout:
+            return None
+
+        def walk(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key in {"session_id", "sessionId", "conversation_id", "conversationId"} and isinstance(item, str):
+                        return item
+                    found = walk(item)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for item in value:
+                    found = walk(item)
+                    if found:
+                        return found
+            return None
+
+        for line_text in stdout.splitlines():
+            line_text = line_text.strip()
+            if not line_text:
+                continue
+            try:
+                payload = json.loads(line_text)
+            except json.JSONDecodeError:
+                continue
+            found = walk(payload)
+            if found:
+                return found
         return None
 
     def _rename_logs(self, old_name: str, new_name: str) -> None:
@@ -705,8 +795,9 @@ class WorkflowRunner:
             session_uuid = self._session_uuids[display_id]
             is_resume = True
         else:
-            session_uuid = str(uuid.uuid4())
-            self._session_uuids[display_id] = session_uuid
+            session_uuid = str(uuid.uuid4()) if self.provider == "claude" else None
+            if self.provider == "claude":
+                self._session_uuids[display_id] = session_uuid
             self._session_counter += 1
             self._session_number_map[display_id] = self._session_counter
             is_resume = False

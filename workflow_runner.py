@@ -574,6 +574,9 @@ class WorkflowRunner:
 
     def sync_summary_to_state(self, round_num: int) -> bool:
         """将故事总梗概.md内容同步到对应状态文档的# 故事总梗概部分"""
+        if self.dry_run:
+            note(f"干运行：跳过同步故事总梗概到状态v{round_num}.md")
+            return True
         summary_file = PROJECTS_ROOT / self.project_name / "03_state" / "故事总梗概.md"
         if not summary_file.exists():
             warn("故事总梗概.md 不存在")
@@ -735,7 +738,14 @@ class WorkflowRunner:
 
             # 标记步骤完成
             if result is not None and result.returncode == 0:
-                self.project_info.mark_step_completed(step, self.round, phase=phase)
+                effective_option_index = option_index if option_index is not None else self.option_index
+                self.project_info.mark_step_completed(
+                    step,
+                    round_num=self.round,
+                    phase=phase,
+                    act_num=act_num,
+                    option_index=effective_option_index,
+                )
                 # 如果选择了方案，同步到项目信息
                 if self.option_index:
                     self.project_info.update(

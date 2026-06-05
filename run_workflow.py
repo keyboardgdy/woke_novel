@@ -8,6 +8,7 @@
 
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from ui import (
@@ -38,131 +39,414 @@ def _print_usage() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 共用流水线：开篇 06-10 + 按幕执行 11-16/17/18 post_17
+# 统一工作流执行器：loop 和 continue 都从执行单元游标进入
 # ---------------------------------------------------------------------------
-# Loop 主流程和 Continue 续跑都调本函数，保证两条路径产物完全一致。
-#
-# 游标 cursor = (opening_done, start_act, start_round_in_act, skip_act_end)
-#   opening_done        — True=开篇 06-10 + create_story_summary 已完成
-#   start_act           — 从哪一幕开始（1-based）
-#   start_round_in_act  — 该幕内从第几轮开始（0-based）
-#   skip_act_end        — True=本幕（start_act）的 17 + 18 post_17 已完成
-#
-# Loop 调：cursor = (False, 1, 0, False)
-# Continue 调：根据 last_step / last_phase 算出 cursor，详见下方
-# ---------------------------------------------------------------------------
-def _run_writing_pipeline(runner, opening_done, start_act, start_round_in_act, skip_act_end):
+
+OPENING_STEPS = ["06", "07", "08", "09", "10"]
+ROUND_STEPS = ["11", "12", "13", "14", "15"]
+
+
+@dataclass(frozen=True)
+class WorkflowCursor:
+    kind: str
+    step: str = None
+    option_index: int = None
+    act_num: int = None
+    round_num: int = None
+    phase: str = None
+
+
+def _step_cursor(step: str, option_index: int = None, act_num: int = None,
+                 round_num: int = None, phase: str = None) -> WorkflowCursor:
+    return WorkflowCursor("step", step, option_index, act_num, round_num, phase)
+
+
+def _loop_count_for_act(act_num: int, chapter_counts: list[int]) -> int:
+    if act_num < 1 or act_num > len(chapter_counts):
+        return 0
+    count = chapter_counts[act_num - 1]
+    return max(0, count - 1) if act_num == 1 else max(0, count)
+
+
+def _first_round_for_act(act_num: int, chapter_counts: list[int]) -> int:
+    return 2 + sum(_loop_count_for_act(i, chapter_counts) for i in range(1, act_num))
+
+
+def _locate_round(round_num: int, chapter_counts: list[int]) -> tuple[int, int] | None:
+    if round_num < 2:
+        return (1, 0) if chapter_counts else None
+    offset = round_num - 2
+    seen = 0
+    for act_num in range(1, len(chapter_counts) + 1):
+        loop_count = _loop_count_for_act(act_num, chapter_counts)
+        if offset < seen + loop_count:
+            return act_num, offset - seen
+        seen += loop_count
+    return None
+
+
+def _next_after_round(round_num: int, act_num: int, chapter_counts: list[int]) -> WorkflowCursor:
+    located = _locate_round(round_num, chapter_counts)
+    loop_idx = located[1] if located else 0
+    if loop_idx + 1 < _loop_count_for_act(act_num, chapter_counts):
+        return _step_cursor("11", act_num=act_num, round_num=round_num + 1)
+    return _step_cursor("17", act_num=act_num)
+
+
+def _next_after_act_end(act_num: int, chapter_counts: list[int]) -> WorkflowCursor:
+    next_act = act_num + 1
+    if next_act <= len(chapter_counts):
+        return _step_cursor("11", act_num=next_act, round_num=_first_round_for_act(next_act, chapter_counts))
+    return WorkflowCursor("done")
+
+
+def _infer_next_05b_act(runner) -> int | None:
+    act_count = runner.project_info.act_count
+    if not act_count:
+        return None
+    baseline_dir = runner.path_resolver.baseline_dir
+    for act_num in range(1, act_count + 1):
+        if not (Path(baseline_dir) / f"核心骨架_{act_num}.md").exists():
+            return act_num
+    return act_count + 1
+
+
+def compute_resume_cursor(runner, option_count: int) -> WorkflowCursor | None:
+    info_obj = runner.project_info
+    last_step = info_obj.last_step
+    if last_step is None:
+        return None
+
+    chapter_counts = info_obj.chapter_counts or []
+    last_phase = info_obj.last_step_phase
+    last_round = info_obj.last_step_round or info_obj.current_round
+    last_act = info_obj.last_step_act
+
+    if last_step == "01":
+        option_index = info_obj.last_step_option_index
+        if option_index and option_index < option_count:
+            return _step_cursor("01", option_index=option_index + 1)
+        return WorkflowCursor("choose_creative")
+    if last_step == "02":
+        return WorkflowCursor("finalize_creative")
+    if last_step == "03":
+        return _step_cursor("04")
+    if last_step == "04":
+        return _step_cursor("05")
+    if last_step == "05":
+        return _step_cursor("05a")
+    if last_step == "05a":
+        return WorkflowCursor("extract_act_count")
+    if last_step == "05b":
+        act_count = info_obj.act_count
+        if last_act is None:
+            next_act = _infer_next_05b_act(runner)
+        else:
+            next_act = last_act + 1
+        if act_count and next_act and next_act <= act_count:
+            return _step_cursor("05b", act_num=next_act)
+        return WorkflowCursor("extract_chapter_counts")
+    if last_step == "18":
+        if last_phase == "post_05b" or (last_phase is None and not last_act):
+            return _step_cursor("06", act_num=1, round_num=1)
+        if last_phase == "post_17" or last_act:
+            return _next_after_act_end(last_act or 1, chapter_counts)
+        return None
+    if last_step in OPENING_STEPS:
+        idx = OPENING_STEPS.index(last_step)
+        if idx + 1 < len(OPENING_STEPS):
+            return _step_cursor(OPENING_STEPS[idx + 1], act_num=1, round_num=1)
+        return WorkflowCursor("create_story_summary", round_num=1)
+    if last_step in ROUND_STEPS:
+        if last_act is None:
+            located = _locate_round(last_round, chapter_counts)
+            last_act = located[0] if located else 1
+        idx = ROUND_STEPS.index(last_step)
+        if idx + 1 < len(ROUND_STEPS):
+            return _step_cursor(ROUND_STEPS[idx + 1], act_num=last_act, round_num=last_round)
+        return WorkflowCursor("append_story_summary", act_num=last_act, round_num=last_round)
+    if last_step == "16":
+        if last_act is None:
+            located = _locate_round(last_round, chapter_counts)
+            last_act = located[0] if located else 1
+        return WorkflowCursor("sync_summary", act_num=last_act, round_num=last_round)
+    if last_step == "17":
+        return _step_cursor("18", act_num=last_act or 1, phase="post_17")
+    return None
+
+
+class WorkflowExecutor:
+    def __init__(self, runner, cursor: WorkflowCursor = None):
+        self.runner = runner
+        self.cursor = cursor
+        self.started = cursor is None
+        self.completed = False
+
+    def _matches(self, unit: WorkflowCursor) -> bool:
+        if self.cursor is None:
+            return True
+        return unit == self.cursor
+
+    def should_run(self, unit: WorkflowCursor) -> bool:
+        if self.completed:
+            return False
+        if not self.started:
+            self.started = self._matches(unit)
+        return self.started
+
+    def require_started(self) -> None:
+        if not self.started and not self.completed:
+            error(f"无法定位断点游标：{self.cursor}")
+            sys.exit(1)
+
+    def run_step(self, step: str, display_id: str, option_index: int = None,
+                 user_description: str = "", act_num: int = None, round_num: int = None,
+                 phase: str = None) -> bool:
+        unit = _step_cursor(step, option_index=option_index, act_num=act_num,
+                            round_num=round_num, phase=phase)
+        if not self.should_run(unit):
+            return True
+        if round_num is not None:
+            self.runner.round = round_num
+        return self.runner.run_step(
+            step,
+            display_id,
+            option_index=option_index,
+            user_description=user_description,
+            act_num=act_num,
+            phase=phase,
+        )
+
+    def run_unit(self, unit: WorkflowCursor, action) -> bool:
+        if not self.should_run(unit):
+            return True
+        return action()
+
+    def finish_if_target_done(self, unit: WorkflowCursor) -> bool:
+        if not self.should_run(unit):
+            return False
+        self.completed = True
+        return True
+
+
+def _finalize_creative_selection(runner, chosen: int, novel_name: str = None) -> None:
+    if novel_name is None:
+        novel_name = runner.extract_novel_name_from_creative(chosen)
+    if novel_name:
+        success(f"提取到小说名：{novel_name}")
+        runner.rename_project(novel_name)
+
+    runner.option_index = chosen
+
+    ref_works = runner.extract_ref_works_from_creative(chosen)
+    if ref_works:
+        note(f"参考作品：{ref_works}")
+        runner.ref_works = ref_works
+
+    runner.project_info.select_option(
+        option_num=chosen, novel_name=novel_name, ref_works=ref_works,
+    )
+
+
+def _run_or_exit(ok: bool, message: str) -> None:
+    if not ok:
+        error(message)
+        sys.exit(1)
+
+
+def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count: int = 3,
+                             user_description: str = "") -> None:
+    executor = WorkflowExecutor(runner, cursor)
+    runner.project_info.update(option_count=option_count)
+    creative_display_id = runner.make_display_id("creative_option")
+    act_display_id = runner.make_display_id("arc")
+
+    print_section("会话 1 · 创意方案生成", color=C.PRIMARY)
+    for option_index in range(1, option_count + 1):
+        if option_index > 1 and executor.started:
+            line(color=C.DIM)
+        if executor.started or executor._matches(_step_cursor("01", option_index=option_index)):
+            note(f"生成方案 {option_index}/{option_count}")
+        _run_or_exit(
+            executor.run_step(
+                "01", creative_display_id,
+                option_index=option_index, user_description=user_description,
+            ),
+            "创意方案生成失败",
+        )
+
+    chosen = runner.project_info.selected_option
+
+    def choose_creative() -> bool:
+        nonlocal chosen
+        chosen = select_creative(runner, option_count)
+        success(f"已选择方案 {chosen}")
+        runner.option_index = chosen
+        return True
+
+    _run_or_exit(executor.run_unit(WorkflowCursor("choose_creative"), choose_creative), "创意方案选择失败")
+    chosen = chosen or runner.project_info.selected_option or 1
+
+    _run_or_exit(
+        executor.run_step("02", creative_display_id, option_index=chosen),
+        "创意方案补充失败",
+    )
+    _run_or_exit(
+        executor.run_unit(WorkflowCursor("finalize_creative"), lambda: (_finalize_creative_selection(runner, chosen) or True)),
+        "创意方案信息提取失败",
+    )
+
+    print_section("会话 2 · 世界观与设定", color=C.PRIMARY)
+    for step in ["03", "04"]:
+        _run_or_exit(executor.run_step(step, runner.make_display_id("world")), f"步骤 {step} 失败")
+
+    print_section("会话 3 · 故事主轴", color=C.PRIMARY)
+    for step in ["05", "05a"]:
+        _run_or_exit(executor.run_step(step, act_display_id), f"步骤 {step} 失败")
+
+    def extract_act_count() -> bool:
+        act_count = runner.extract_act_count_from_macro_model()
+        if not act_count:
+            warn("无法获取幕次总数，跳过 05b 循环")
+            return True
+        runner.project_info.update(act_count=act_count)
+        success(f"提取幕次总数：{act_count}")
+        return True
+
+    _run_or_exit(executor.run_unit(WorkflowCursor("extract_act_count"), extract_act_count), "幕次总数提取失败")
+
+    act_count = runner.project_info.act_count or 0
+    if act_count:
+        print_section(f"步骤 05b 循环 · 幕次核心骨架（共 {act_count} 幕）", color=C.PRIMARY)
+    for act_num in range(1, act_count + 1):
+        if act_num > 1 and executor.started:
+            line(color=C.DIM)
+        if executor.started or executor._matches(_step_cursor("05b", act_num=act_num)):
+            note(f"幕次 {act_num}/{act_count}")
+        _run_or_exit(
+            executor.run_step(
+                "05b", act_display_id,
+                user_description=f"幕次{act_num}", act_num=act_num,
+            ),
+            f"步骤 05b (幕次{act_num}) 失败",
+        )
+
+    def extract_chapter_counts() -> bool:
+        act_count_inner = runner.project_info.act_count or 0
+        if not act_count_inner:
+            return True
+        chapter_counts = runner.extract_all_chapter_counts(act_count_inner)
+        total_chapters = sum(chapter_counts)
+        success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
+        runner.project_info.update(chapter_counts=chapter_counts, total_chapters=total_chapters)
+        return True
+
+    _run_or_exit(
+        executor.run_unit(WorkflowCursor("extract_chapter_counts"), extract_chapter_counts),
+        "章节数提取失败",
+    )
+
+    print_section("步骤 18 · post_05b 生成项目级 CLAUDE.md", color=C.ACCENT)
+    if not executor.run_step("18", act_display_id, phase="post_05b"):
+        warn("步骤 18 post_05b 失败，不影响后续流程")
+
+    print_section("会话 4 · 开篇创作", color=C.PRIMARY)
+    choice = _confirm_open_session()
+    if choice == "n":
+        info("已暂停。重新运行可使用 'continue' 命令从断点继续。")
+        sys.exit(0)
+    if choice == "q":
+        info("用户主动退出。")
+        sys.exit(0)
+
+    opening_display_id = runner.make_display_id("opening")
+    for step in OPENING_STEPS:
+        _run_or_exit(
+            executor.run_step(step, opening_display_id, act_num=1, round_num=1),
+            f"步骤 {step} 失败",
+        )
+
+    _run_or_exit(
+        executor.run_unit(
+            WorkflowCursor("create_story_summary", round_num=1),
+            lambda: runner.extract_and_create_story_summary(1),
+        ),
+        "开篇故事梗概提取失败",
+    )
+
     chapter_counts = runner.project_info.chapter_counts or []
-    total_chapters = runner.project_info.total_chapters or 0
+    total_chapters = runner.project_info.total_chapters or sum(chapter_counts)
     success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
 
-    if not opening_done:
-        print_section("会话 · 开篇创作", color=C.PRIMARY)
-        # 开篇产物文件名编号是 v1（不是 v2），所以开篇期间 runner.round=1
-        runner.round = 1
-        runner.run_session_block("opening", ["06", "07", "08", "09", "10"], act_num=1)
-        runner.extract_and_create_story_summary(1)
-
-    # 进入循环段：从 R2 开始（第 1 幕的首轮）
-    if not opening_done or runner.round < 2:
-        runner.round = 2
-
-    for act_num in range(start_act, len(chapter_counts) + 1):
-        act_chapters = chapter_counts[act_num - 1]
-        loop_count = (act_chapters - 1) if act_num == 1 else act_chapters
+    for act_num in range(1, len(chapter_counts) + 1):
+        loop_count = _loop_count_for_act(act_num, chapter_counts)
         if loop_count <= 0:
             warn(f"第 {act_num} 幕可用轮次为 0，跳过")
             continue
 
         print_section(f"第 {act_num} 幕创作循环（共 {loop_count} 轮）", color=C.PRIMARY)
-
-        begin_in_act = start_round_in_act if act_num == start_act else 0
-        for loop_idx in range(begin_in_act, loop_count):
-            relative = loop_idx + 1
+        first_round = _first_round_for_act(act_num, chapter_counts)
+        for loop_idx in range(loop_count):
+            round_num = first_round + loop_idx
             print_section(
-                f"第 {act_num} 幕 · 轮次 {relative}/{loop_count}（R{runner.round}）",
+                f"第 {act_num} 幕 · 轮次 {loop_idx + 1}/{loop_count}（R{round_num}）",
                 color=C.ACCENT,
             )
+            session_name = runner.make_display_id(f"round_{round_num}")
+            for step in ROUND_STEPS:
+                _run_or_exit(
+                    executor.run_step(step, session_name, act_num=act_num, round_num=round_num),
+                    f"步骤 {step} 失败",
+                )
 
-            session_name = f"round_{runner.round}"
-            if not runner.run_session_block(session_name, ["11", "12", "13", "14", "15"], act_num=act_num):
-                error("创作循环失败")
-                sys.exit(1)
+            _run_or_exit(
+                executor.run_unit(
+                    WorkflowCursor("append_story_summary", act_num=act_num, round_num=round_num),
+                    lambda round_num=round_num: runner.append_story_summary(round_num),
+                ),
+                "追加故事梗概失败",
+            )
 
-            runner.append_story_summary(runner.round)
+            _run_or_exit(
+                executor.run_step("16", session_name, act_num=act_num, round_num=round_num),
+                "步骤 16 失败",
+            )
 
-            if not runner.run_session_block(session_name, ["16"], act_num=act_num):
-                error("步骤 16 失败")
-                sys.exit(1)
+            def sync_round(round_num=round_num) -> bool:
+                ok = runner.sync_summary_to_state(round_num)
+                runner.project_info.update(current_round=round_num)
+                runner.round = round_num + 1
+                return ok
 
-            runner.sync_summary_to_state(runner.round)
-            runner.project_info.update(current_round=runner.round)
-
+            _run_or_exit(
+                executor.run_unit(
+                    WorkflowCursor("sync_summary", act_num=act_num, round_num=round_num),
+                    sync_round,
+                ),
+                "同步故事梗概失败",
+            )
             note("继续下一轮…")
-            runner.round += 1
-
-        # 幕末 17 + 18 post_17：仅当本幕不是"已做完"形态时跑
-        if act_num == start_act and skip_act_end:
-            continue
 
         print_section(f"步骤 17 · 第 {act_num} 幕故事梗概精简", color=C.PRIMARY)
-        if not runner.run_step(
-            "17", runner.make_display_id(f"act_{act_num}"), act_num=act_num,
-        ):
-            error("步骤 17 失败")
-            sys.exit(1)
-        runner.sync_summary_to_state(runner.round - 1)
+        _run_or_exit(
+            executor.run_step("17", runner.make_display_id(f"act_{act_num}"), act_num=act_num),
+            "步骤 17 失败",
+        )
+        runner.sync_summary_to_state(_first_round_for_act(act_num, chapter_counts) + loop_count - 1)
 
         print_section(
             f"步骤 18 · post_17 刷新项目根 CLAUDE.md（第 {act_num} 幕后）",
             color=C.ACCENT,
         )
-        if not runner.run_step(
+        if not executor.run_step(
             "18", runner.make_display_id(f"act_{act_num}"),
             phase="post_17", act_num=act_num,
         ):
             warn("步骤 18 post_17 失败，不影响后续流程")
 
-
-def _compute_resume_cursor(last_step, last_phase, current_round, chapter_counts):
-    """根据断点状态算出 (_run_writing_pipeline 用的) 游标。
-
-    返回 (opening_done, start_act, start_round_in_act, skip_act_end)。
-    返回 None 表示"该断点不属于本函数管辖范围"（continue 调用方另处理）。
-    """
-    # ---- 18 post_05b：规划层完成、开篇没做 → 跑开篇
-    if last_step == "18" and last_phase == "post_05b":
-        return (False, 1, 0, False)
-
-    # ---- 开篇 06-09 中断：续跑开篇
-    if last_step in {"06", "07", "08", "09"}:
-        return (False, 1, 0, False)
-
-    # ---- 10 完成：进入循环段
-    if last_step == "10":
-        return (True, 1, 0, False)
-
-    # ---- 循环段/幕末：反推游标
-    if last_step in {"11", "12", "13", "14", "15"}:
-        completed_loops = current_round - 2  # 该轮没完成
-    elif last_step in {"16", "17"} or (last_step == "18" and last_phase == "post_17"):
-        completed_loops = current_round - 1
-    else:
-        return None
-
-    cum = 0
-    for i, cnt in enumerate(chapter_counts, start=1):
-        loop_count = (cnt - 1) if i == 1 else cnt
-        if completed_loops < cum + loop_count:
-            start_act = i
-            start_round_in_act = completed_loops - cum
-            break
-        cum += loop_count
-    else:
-        return None  # completed_loops 超出总循环段
-
-    skip_act_end = last_step == "18" and last_phase == "post_17"
-    return (True, start_act, start_round_in_act, skip_act_end)
+    if cursor and cursor.kind == "done" and executor.finish_if_target_done(WorkflowCursor("done")):
+        success("工作流此前已完成，无需继续执行。")
+    executor.require_started()
 
 
 # ---------------------------------------------------------------------------
@@ -285,110 +569,11 @@ def main() -> None:
                      f" · 目录 {runner.path_resolver.project_root}",
         )
 
-        # ========== 会话1: 创意方案生成 ==========
-        print_section("会话 1 · 创意方案生成", color=C.PRIMARY)
-
-        option_count = args.option_count
-        creative_display_id = runner.make_display_id("creative_option")
-        for i in range(option_count):
-            if i > 0:
-                # 步骤间分隔：每次 step 完成 → 下一次 "生成方案" 注记之间画一条细线
-                line(color=C.DIM)
-            note(f"生成方案 {i+1}/{option_count}")
-            if not runner.run_step(
-                "01", creative_display_id,
-                option_index=i + 1, user_description=user_description,
-            ):
-                error("创意方案生成失败")
-                sys.exit(1)
-
-        chosen = select_creative(runner, option_count)
-        success(f"已选择方案 {chosen}")
-
-        if not runner.run_step("02", creative_display_id, option_index=chosen):
-            error("创意方案补充失败")
-            sys.exit(1)
-
-        novel_name = runner.extract_novel_name_from_creative(chosen)
-        if novel_name:
-            success(f"提取到小说名：{novel_name}")
-            runner.rename_project(novel_name)
-
-        runner.option_index = chosen
-
-        ref_works = runner.extract_ref_works_from_creative(chosen)
-        if ref_works:
-            note(f"参考作品：{ref_works}")
-            runner.ref_works = ref_works
-
-        runner.project_info.select_option(
-            option_num=chosen, novel_name=novel_name, ref_works=ref_works,
+        run_workflow_from_cursor(
+            runner,
+            option_count=args.option_count,
+            user_description=user_description,
         )
-
-        # ========== 会话2: 世界观与设定 ==========
-        print_section("会话 2 · 世界观与设定", color=C.PRIMARY)
-        runner.run_session_block("world", ["03", "04"])
-
-        # ========== 会话3: 故事主轴 ==========
-        print_section("会话 3 · 故事主轴", color=C.PRIMARY)
-        act_display_id = runner.make_display_id("arc")
-        for idx, step in enumerate(["05", "05a"]):
-            step_name = STEP_NAMES.get(step, step)
-            if idx > 0:
-                line(color=C.DIM)
-            note(f"执行步骤 {step} · {step_name}")
-            if not runner.run_step(step, act_display_id):
-                error(f"步骤 {step} 失败")
-                sys.exit(1)
-
-        act_count = runner.extract_act_count_from_macro_model()
-        if act_count:
-            runner.project_info.update(act_count=act_count)
-            success(f"提取幕次总数：{act_count}")
-
-            print_section(f"步骤 05b 循环 · 幕次核心骨架（共 {act_count} 幕）", color=C.PRIMARY)
-            for act_num in range(1, act_count + 1):
-                if act_num > 1:
-                    line(color=C.DIM)
-                note(f"幕次 {act_num}/{act_count}")
-                if not runner.run_step(
-                    "05b", act_display_id,
-                    user_description=f"幕次{act_num}", act_num=act_num,
-                ):
-                    error(f"步骤 05b (幕次{act_num}) 失败")
-                    sys.exit(1)
-
-            chapter_counts = runner.extract_all_chapter_counts(act_count)
-            total_chapters = sum(chapter_counts)
-            success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
-
-            runner.project_info.update(
-                chapter_counts=chapter_counts, total_chapters=total_chapters,
-            )
-
-            # 步骤 18 post_05b
-            print_section("步骤 18 · post_05b 生成项目级 CLAUDE.md", color=C.ACCENT)
-            if not runner.run_step("18", act_display_id, phase="post_05b"):
-                warn("步骤 18 post_05b 失败，不影响后续流程")
-        else:
-            warn("无法获取幕次总数，跳过 05b 循环")
-
-        # ========== 会话4: 开篇创作 ==========
-        print_section("会话 4 · 开篇创作", color=C.PRIMARY)
-        choice = _confirm_open_session()
-        if choice == "n":
-            info("已暂停。重新运行可使用 'continue' 命令从断点继续。")
-            sys.exit(0)
-        if choice == "q":
-            info("用户主动退出。")
-            sys.exit(0)
-
-        runner.run_session_block("opening", ["06", "07", "08", "09", "10"], act_num=1)
-        runner.extract_and_create_story_summary(1)
-
-        runner.round = 2
-
-        _run_writing_pipeline(runner, opening_done=True, start_act=1, start_round_in_act=0, skip_act_end=False)
 
         print_done(
             project=runner.project_name,
@@ -426,64 +611,30 @@ def main() -> None:
         if runner.project_info.ref_works:
             runner.ref_works = runner.project_info.ref_works
 
-        chapter_counts = runner.project_info.chapter_counts or []
-
-        # ====================================================================
-        # 1) 规划层/世界观/创意/主轴（01-05b）断点：直接重跑该 step
-        # ====================================================================
-        non_writing_steps = {
-            "01", "02", "03", "04", "05", "05a", "05b",
-        }
-        if last_step in non_writing_steps:
-            step_name = STEP_NAMES.get(last_step, last_step)
-            note(f"将重新执行：{last_step} {step_name}")
-            if not confirm("确认继续?", default=True):
-                warn("已取消")
-                sys.exit(0)
-            runner.run_step(last_step, runner.make_display_id(last_step))
-            print_done(
-                project=runner.project_name,
-                extra=f"最后执行步骤 {last_step}",
-            )
-            sys.exit(0)
-
-        # ====================================================================
-        # 2) 开篇/循环段/幕末断点：算出游标，调共用流水线
-        # ====================================================================
-        cursor = _compute_resume_cursor(last_step, last_phase, current_round, chapter_counts)
+        option_count = runner.project_info.get("option_count", 3)
+        cursor = compute_resume_cursor(runner, option_count=option_count)
         if cursor is None:
-            error(f"无法识别的循环段断点 last_step={last_step!r} last_phase={last_phase!r}")
+            error(f"无法识别的断点 last_step={last_step!r} last_phase={last_phase!r}")
             sys.exit(1)
-        opening_done, start_act, start_round_in_act, skip_act_end = cursor
 
-        if not opening_done and last_step in {"06", "07", "08", "09"}:
-            note(f"检测到开篇中断 步骤 {last_step}，将续跑开篇 06-10")
-        elif not opening_done and last_step == "18" and last_phase == "post_05b":
-            note("检测到 18 (post_05b) 断点：规划层已完成，开篇 06-10 尚未开始")
+        if cursor.kind == "done":
+            note("断点定位：工作流已完成")
+        elif cursor.kind == "step":
+            detail = f"步骤 {cursor.step}"
+            if cursor.act_num:
+                detail += f" · 第 {cursor.act_num} 幕"
+            if cursor.round_num:
+                detail += f" · R{cursor.round_num}"
+            if cursor.phase:
+                detail += f" · {cursor.phase}"
+            note(f"断点定位：将从 {detail} 继续")
         else:
-            note(
-                f"断点定位：第 {start_act} 幕内已完成 {start_round_in_act} 轮"
-                + (" · 本幕 17/18 已完成" if skip_act_end else "")
-            )
-        if not confirm("确认继续?", default=True):
+            note(f"断点定位：将从 {cursor.kind} 继续")
+        if not args.dry and not confirm("确认继续?", default=True):
             warn("已取消")
             sys.exit(0)
 
-        # runner.round 对齐：
-        #   - 开篇未做 → 1（开篇产物是 v1，函数内部跑完开篇会自动跳到 2）
-        #   - 循环段中 → current_round（保持续跑游标）
-        runner.round = 1 if not opening_done else current_round
-        # current_round 在 json 里就是 1（开篇未做时）或 current_round（循环段中），无需覆盖
-        if opening_done:
-            runner.project_info.update(current_round=current_round)
-
-        _run_writing_pipeline(
-            runner,
-            opening_done=opening_done,
-            start_act=start_act,
-            start_round_in_act=start_round_in_act,
-            skip_act_end=skip_act_end,
-        )
+        run_workflow_from_cursor(runner, cursor=cursor, option_count=option_count)
 
         print_done(
             project=runner.project_name,

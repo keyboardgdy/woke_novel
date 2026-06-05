@@ -117,6 +117,21 @@ class ProjectInfo:
         return self._data.get("last_step_phase")
 
     @property
+    def last_step_act(self) -> Optional[int]:
+        """获取最后完成步骤所属幕次。"""
+        return self._data.get("last_step_act")
+
+    @property
+    def last_step_round(self) -> Optional[int]:
+        """获取最后完成步骤所属轮次。"""
+        return self._data.get("last_step_round")
+
+    @property
+    def last_step_option_index(self) -> Optional[int]:
+        """获取最后完成步骤所属创意方案序号。"""
+        return self._data.get("last_step_option_index")
+
+    @property
     def created_at(self) -> Optional[str]:
         """获取创建时间"""
         return self._data.get("created_at")
@@ -131,19 +146,30 @@ class ProjectInfo:
         """获取目标字数（来自规模档位）。"""
         return self._data.get("target_word_count")
 
-    def mark_step_completed(self, step: str, round_num: int = 1, phase: str = None) -> bool:
+    def mark_step_completed(self, step: str, round_num: int = 1, phase: str = None,
+                            act_num: int = None, option_index: int = None) -> bool:
         """标记步骤已完成。
 
         phase: 步骤 18 等多 phase 步骤用，区分 "post_05b" / "post_17"。
-        传 None 时不更新 last_step_phase（保持旧值）；显式传字符串（即使是
-        "post_05b" / ""）会覆盖——以便"回到主流程"时清空。
+        phase / act_num / option_index 传 None 时不更新对应字段（兼容旧调用）；
+        显式传字符串（即使是 "post_05b" / ""）会覆盖 phase。
         """
         self._data["last_step"] = step
         self._data["last_step_at"] = datetime.now().isoformat()
+        self._data["last_step_round"] = round_num
+        self._data["workflow_version"] = 2
         if round_num > self.current_round:
             self._data["current_round"] = round_num
         if phase is not None:
             self._data["last_step_phase"] = phase
+        elif step != "18":
+            self._data.pop("last_step_phase", None)
+        if act_num is not None:
+            self._data["last_step_act"] = act_num
+        elif step not in {"05b", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"}:
+            self._data.pop("last_step_act", None)
+        if option_index is not None:
+            self._data["last_step_option_index"] = option_index
         return self.save()
 
     def select_option(self, option_num: int, novel_name: str = None, ref_works: str = None) -> bool:
@@ -170,6 +196,11 @@ class ProjectInfo:
             "novel_name": None,
             "last_step": None,
             "last_step_at": None,
+            "last_step_act": None,
+            "last_step_round": None,
+            "last_step_option_index": None,
+            "last_step_phase": None,
+            "workflow_version": 2,
         }
         return self.save()
 

@@ -26,7 +26,7 @@ from ui import (
     blank, chip, clear, confirm, dim, error, indent, info, init, line, note,
     print_banner, print_header, print_kv, print_panel, print_projects_table,
     print_section, print_steps_table, print_subheader, prompt, select,
-    select_project, success, warn, press_enter,
+    select_project, select_projects, success, warn, press_enter,
 )
 from workflow_runner import STEP_NAMES, STEP_FILES, WorkflowRunner
 import cli as cli_module
@@ -358,7 +358,7 @@ def continue_mode() -> None:
 def delete_project_mode() -> None:
     """删除小说项目目录和对应日志目录。"""
     clear()
-    print_banner("删除项目", subtitle="删除 projects/<项目名> 和 logs/<项目名>", accent=C.ERROR)
+    print_banner("删除项目", subtitle="批量删除 projects/<项目名> 和 logs/<项目名>", accent=C.ERROR)
 
     projects = list_existing_projects()
     if not projects:
@@ -366,48 +366,58 @@ def delete_project_mode() -> None:
         press_enter()
         return
 
-    idx = select_project(projects, allow_new=False)
-    if idx is None:
+    project_names = select_projects(projects)
+    if not project_names:
+        warn("已取消。")
+        press_enter()
         return
-    project_name = idx
 
-    project_path = _projects_root() / project_name
-    log_path = _logs_root() / project_name
-    targets = [path for path in (project_path, log_path) if path.exists()]
+    entries: List[Tuple[str, Path, Path, List[Path]]] = []
+    targets: List[Tuple[str, Path, Path]] = []
+    for project_name in project_names:
+        project_path = _projects_root() / project_name
+        log_path = _logs_root() / project_name
+        project_targets = [path for path in (project_path, log_path) if path.exists()]
+        entries.append((project_name, project_path, log_path, project_targets))
+        for path in project_targets:
+            parent = _projects_root() if path == project_path else _logs_root()
+            targets.append((project_name, path, parent))
 
-    print_subheader(f"项目：{project_name}", color=C.ERROR)
-    print_kv([
-        ("项目目录", str(project_path) if project_path.exists() else f"{project_path}（不存在）"),
-        ("日志目录", str(log_path) if log_path.exists() else f"{log_path}（不存在）"),
-    ])
+    print_subheader("待删除项目", color=C.ERROR)
+    for project_name, project_path, log_path, _ in entries:
+        print_kv([
+            ("项目", project_name),
+            ("项目目录", str(project_path) if project_path.exists() else f"{project_path}（不存在）"),
+            ("日志目录", str(log_path) if log_path.exists() else f"{log_path}（不存在）"),
+        ])
+        blank()
 
     if not targets:
         warn("项目目录和日志目录都不存在，无需删除。")
         press_enter()
         return
 
-    for path in targets:
-        parent = _projects_root() if path == project_path else _logs_root()
+    for _, path, parent in targets:
         if not path.is_dir() or not _is_direct_child(path, parent):
             error(f"拒绝删除异常路径: {path}")
             press_enter()
             return
 
     warn("此操作会永久删除项目产物和运行日志，无法从菜单内恢复。")
-    if not confirm("确认删除该项目?", default=False):
+    if not confirm(f"确认删除选中的 {len(project_names)} 个项目?", default=False):
         warn("已取消。")
         press_enter()
         return
 
-    typed = prompt("请输入项目名以确认删除", show_default=False)
-    if typed != project_name:
-        error("项目名不匹配，已取消删除。")
+    typed = prompt("请输入 DELETE 以确认批量删除", show_default=False)
+    if typed != "DELETE":
+        error("确认文本不匹配，已取消删除。")
         press_enter()
         return
 
-    for path in targets:
+    for project_name, path, _ in targets:
         shutil.rmtree(path)
-        success(f"已删除: {path}")
+        success(f"已删除 [{project_name}]: {path}")
 
     press_enter()
 

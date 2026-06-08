@@ -590,6 +590,68 @@ def select_project(projects: Sequence[Dict[str, Any]], allow_new: bool = True) -
     return projects[idx].get("name")
 
 
+def select_projects(projects: Sequence[Dict[str, Any]]) -> List[str]:
+    """从项目表里批量选择项目；返回项目名列表。"""
+    print_projects_table(projects, title="选择项目")
+    if not projects:
+        return []
+
+    _console.print()
+    _console.print(f"  {I.ARROW} 请选择项目编号", style=f"bold {C.PRIMARY}")
+    _console.print(f"     支持多个编号，例如 1,3,5 或 1-3；输入 all 全选，输入 0 取消。", style=C.DIM)
+
+    max_index = len(projects)
+    while True:
+        try:
+            raw = Prompt.ask(
+                f"  {I.ARROW} 选择",
+                default="0",
+                console=_console,
+            ).strip()
+        except EOFError:
+            warn("无输入，已取消。")
+            return []
+
+        value = raw.lower()
+        if value in {"0", "q", "quit", "cancel"}:
+            return []
+        if value in {"all", "*", "全部"}:
+            return [p.get("name") for p in projects if p.get("name")]
+
+        selected: List[int] = []
+        valid = True
+        for part in raw.replace("，", ",").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                start_raw, end_raw = [item.strip() for item in part.split("-", 1)]
+                if not start_raw.isdigit() or not end_raw.isdigit():
+                    valid = False
+                    break
+                start, end = int(start_raw), int(end_raw)
+                if start > end:
+                    start, end = end, start
+                selected.extend(range(start, end + 1))
+                continue
+            if not part.isdigit():
+                valid = False
+                break
+            selected.append(int(part))
+
+        deduped = []
+        for idx in selected:
+            if idx < 1 or idx > max_index:
+                valid = False
+                break
+            if idx not in deduped:
+                deduped.append(idx)
+
+        if valid and deduped:
+            return [projects[idx - 1].get("name") for idx in deduped if projects[idx - 1].get("name")]
+        warn("无效选择，请输入编号、范围、all 或 0。")
+
+
 # ---------------------------------------------------------------------------
 # 杂项
 # ---------------------------------------------------------------------------
@@ -627,6 +689,6 @@ __all__ = [
     "print_projects_table", "print_choices_table",
     "success", "warn", "error", "info", "dim", "debug", "note",
     "step_header", "step_result", "format_elapsed", "spinner",
-    "confirm", "prompt", "select", "select_project",
+    "confirm", "prompt", "select", "select_project", "select_projects",
     "print_done", "press_enter", "pause",
 ]

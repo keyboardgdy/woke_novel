@@ -630,9 +630,56 @@ class WorkflowRunner:
             return None
         try:
             content = state_file.read_text(encoding='utf-8')
-            match = re.search(r'^# 故事总梗概\s*\n(.*?)(?=\n#|\n---|\Z)',
-                              content, re.MULTILINE | re.DOTALL)
-            return match.group(1).strip() if match else None
+            content = content.replace('\ufeff', '').replace('\r\n', '\n').replace('\r', '\n')
+            content = re.sub(r'^\s*```(?:markdown|md)?\s*\n', '', content, flags=re.IGNORECASE)
+            content = re.sub(r'\n\s*```\s*$', '\n', content)
+
+            def _clean_summary(text: str) -> Optional[str]:
+                text = re.sub(r'^\s*[-*]\s*', '', text.strip())
+                text = re.sub(r'\n{3,}', '\n\n', text).strip()
+                return text or None
+
+            # 1) 优先支持机器可读标记，便于兼容后续更稳定的状态文档格式。
+            match = re.search(
+                r'<!--\s*STORY_SUMMARY_START\s*-->\s*(.*?)\s*<!--\s*STORY_SUMMARY_END\s*-->',
+                content,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if match:
+                return _clean_summary(match.group(1))
+
+            # 2) 兼容常见标题变体：标题层级、空格、编号、"本轮/故事梗概片段"等。
+            summary_heading = (
+                r'^\s{0,3}#{1,6}\s*'
+                r'(?=[^\n]*梗概)'
+                r'(?![^\n]*(?:精简|写作指南|剧情方向|剧情设计))'
+                r'[^\n]*$'
+            )
+            match = re.search(
+                rf'{summary_heading}\n(.*?)(?=\n\s*(?:#{{1,6}}\s+|---+\s*$|<!--\s*STORY_SUMMARY_END\s*-->)|\Z)',
+                content,
+                re.MULTILINE | re.DOTALL,
+            )
+            if match:
+                return _clean_summary(match.group(1))
+
+            # 3) 兜底：状态文档通常在 "# 故事状态 vN" 后紧跟梗概；取下一个标题/分隔线前的第一段。
+            match = re.search(
+                r'^\s{0,3}#{1,6}\s*故事状态\s*v?\d+\s*$\n(.*?)(?=\n\s*(?:#{1,6}\s+|---+\s*$)|\Z)',
+                content,
+                re.MULTILINE | re.DOTALL,
+            )
+            if match:
+                section = match.group(1).strip()
+                paragraphs = [
+                    paragraph.strip()
+                    for paragraph in re.split(r'\n\s*\n', section)
+                    if paragraph.strip()
+                ]
+                if paragraphs:
+                    return _clean_summary(paragraphs[0])
+
+            return None
         except Exception as e:
             warn(f"提取故事梗概失败: {e}")
             return None

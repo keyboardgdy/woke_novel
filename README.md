@@ -104,10 +104,10 @@ python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 
 工作流会把每一步 prompt 投喂给外部 CLI 子进程，并要求模型直接把产物写入 `projects/<小说名>/`。为了避免非交互式流水线卡在权限确认界面，当前实现会自动跳过 CLI 审批：
 
-| 后端 | 当前调用方式 | 说明 |
-| --- | --- | --- |
-| Claude CLI | `--permission-mode bypassPermissions` | 跳过 Claude 的权限确认，保持流水线无人值守执行 |
-| Codex CLI | `--dangerously-bypass-approvals-and-sandbox` | 跳过 Codex 审批并关闭 Codex 沙箱，适合已信任的本地项目环境 |
+| 后端         | 当前调用方式                                       | 说明                                   |
+| ---------- | -------------------------------------------- | ------------------------------------ |
+| Claude CLI | `--permission-mode bypassPermissions`        | 跳过 Claude 的权限确认，保持流水线无人值守执行          |
+| Codex CLI  | `--dangerously-bypass-approvals-and-sandbox` | 跳过 Codex 审批并关闭 Codex 沙箱，适合已信任的本地项目环境 |
 
 如果你希望 Codex 更保守运行，可以在 `workflow_runner.py` 里把 Codex 参数改为 `--ask-for-approval never --sandbox workspace-write`。这样仍不弹审批确认，但会保留工作区写入沙箱。
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import ui
+from i18n import t
 
 # 默认项目根目录
 DEFAULT_PROJECTS_ROOT = Path(__file__).resolve().parent / "projects"
@@ -50,10 +51,10 @@ class ProjectStructure:
             self.project_path.mkdir(parents=True, exist_ok=True)
             for subdir in PROJECT_STRUCTURE.keys():
                 (self.project_path / subdir).mkdir(parents=True, exist_ok=True)
-            ui.success(f"项目目录已创建: {self.project_path}")
+            ui.success(t("structure.created", path=self.project_path))
             return True
         except Exception as e:
-            ui.error(f"创建项目目录失败: {e}")
+            ui.error(t("structure.create_failed", error=e))
             return False
 
     def get_path(self, subdir: str, filename: str = None) -> Path:
@@ -71,28 +72,28 @@ class ProjectStructure:
         old_path = self.project_path
         new_path = self.root_dir / new_name
         if not old_path.exists():
-            ui.error(f"项目路径不存在: {old_path}")
+            ui.error(t("structure.path_missing", path=old_path))
             return False
         if new_path.exists():
-            ui.warn(f"目标路径已存在: {new_path}")
+            ui.warn(t("structure.target_exists", path=new_path))
             return False
         try:
             old_path.rename(new_path)
-            ui.success(f"项目已重命名: {self.project_name} → {new_name}")
+            ui.success(t("structure.renamed", old=self.project_name, new=new_name))
             self.project_name = new_name
             self.project_path = new_path
             return True
         except Exception as e:
-            ui.info(f"直接重命名失败，尝试复制+删除策略…")
+            ui.info(t("structure.rename_copy_fallback"))
             try:
                 shutil.copytree(old_path, new_path)
                 shutil.rmtree(old_path)
-                ui.success(f"项目已重命名: {self.project_name} → {new_name}")
+                ui.success(t("structure.renamed", old=self.project_name, new=new_name))
                 self.project_name = new_name
                 self.project_path = new_path
                 return True
             except Exception as e2:
-                ui.error(f"重命名失败: {e2}")
+                ui.error(t("structure.rename_failed", error=e2))
                 return False
 
 
@@ -106,11 +107,11 @@ def generate_project_structure(project_name: str, root_dir: str = None) -> Proje
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法: python project_structure.py <项目名> [根目录]")
+        print(t("structure.usage"))
         sys.exit(1)
 
     project_name = sys.argv[1]
     root_dir = sys.argv[2] if len(sys.argv) > 2 else None
 
     ps = generate_project_structure(project_name, root_dir)
-    print(f"\n项目结构已创建: {ps.project_path}")
+    print(t("structure.created_plain", path=ps.project_path))

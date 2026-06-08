@@ -9,6 +9,7 @@ woke_novel 主菜单（单步 / 完整 / 继续 / 步骤列表）。
 import shutil
 import subprocess
 import sys
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -28,14 +29,83 @@ from ui import (
     print_section, print_steps_table, print_subheader, prompt, select,
     select_project, select_projects, success, warn, press_enter,
 )
-from workflow_runner import STEP_NAMES, STEP_FILES, WorkflowRunner
+from workflow_runner import STEP_NAMES, STEP_FILES, WorkflowRunner, step_name
 import cli as cli_module
+import i18n as i18n_module
+from i18n import t
 
 # 模块级缓存：ask_user_description 拿到的值，留给 full_loop_mode 透传给子进程。
 # 一次菜单会话内只可能问一次，所以单变量够用。
 _pending_user_description: Optional[str] = None
 _pending_novel_size: Optional[str] = None
 _current_provider: str = "claude"
+_current_language: str = "zh"
+CONFIG_FILE = Path(__file__).parent / ".menu_config.json"
+SUPPORTED_PROVIDERS = ("claude", "codex")
+SUPPORTED_LANGUAGES = ("zh", "en")
+
+
+def _normalize_provider(provider: Optional[str]) -> str:
+    value = (provider or "claude").strip().lower()
+    return value if value in SUPPORTED_PROVIDERS else "claude"
+
+
+def _normalize_language(language: Optional[str]) -> str:
+    value = (language or "zh").strip().lower()
+    return value if value in SUPPORTED_LANGUAGES else "zh"
+
+
+def _load_menu_config() -> Dict[str, Any]:
+    if not CONFIG_FILE.exists():
+        return {}
+    try:
+        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        warn(t("config.load_failed", error=e))
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_menu_config(config: Dict[str, Any]) -> bool:
+    try:
+        CONFIG_FILE.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return True
+    except Exception as e:
+        warn(t("config.save_failed", error=e))
+        return False
+
+
+def _load_configured_provider() -> str:
+    return _normalize_provider(_load_menu_config().get("provider"))
+
+
+def _save_configured_provider(provider: str) -> bool:
+    config = _load_menu_config()
+    config["provider"] = _normalize_provider(provider)
+    return _save_menu_config(config)
+
+
+def _load_configured_language() -> str:
+    return _normalize_language(_load_menu_config().get("language"))
+
+
+def _save_configured_language(language: str) -> bool:
+    config = _load_menu_config()
+    config["language"] = _normalize_language(language)
+    return _save_menu_config(config)
+
+
+def _has_configured_provider(config: Dict[str, Any]) -> bool:
+    value = config.get("provider")
+    return isinstance(value, str) and value.strip().lower() in SUPPORTED_PROVIDERS
+
+
+def _has_configured_language(config: Dict[str, Any]) -> bool:
+    value = config.get("language")
+    return isinstance(value, str) and value.strip().lower() in SUPPORTED_LANGUAGES
 
 
 def _provider_label(provider: Optional[str] = None) -> str:
@@ -43,17 +113,39 @@ def _provider_label(provider: Optional[str] = None) -> str:
     return "Codex CLI" if value == "codex" else "Claude CLI"
 
 
-def choose_provider() -> str:
-    """菜单启动时选择外部 CLI 后端。"""
+def _language_label(language: Optional[str] = None) -> str:
+    value = _normalize_language(language or _current_language)
+    return t("language.en_label") if value == "en" else t("language.zh_label")
+
+
+def choose_language(default_language: Optional[str] = None) -> str:
+    """选择提示词和题材预设语言。"""
     clear()
-    print_banner("woke_novel 工作流", subtitle="选择模型 CLI 后端")
+    print_banner(t("app.title"), subtitle=t("language.subtitle"))
+    default_value = _normalize_language(default_language)
     idx = select(
-        "使用哪种架构",
+        t("language.prompt"),
         [
-            "Claude CLI   使用 claude / claude.cmd",
-            "Codex CLI    使用 codex / codex.cmd",
+            t("language.zh_option"),
+            t("language.en_option"),
         ],
-        default=0,
+        default=1 if default_value == "en" else 0,
+    )
+    return "en" if idx == 1 else "zh"
+
+
+def choose_provider(default_provider: Optional[str] = None) -> str:
+    """选择外部 CLI 后端。"""
+    clear()
+    print_banner(t("app.title"), subtitle=t("provider.subtitle"))
+    default_value = _normalize_provider(default_provider)
+    idx = select(
+        t("provider.prompt"),
+        [
+            t("provider.claude_option"),
+            t("provider.codex_option"),
+        ],
+        default=1 if default_value == "codex" else 0,
     )
     return "codex" if idx == 1 else "claude"
 
@@ -77,19 +169,21 @@ def _is_direct_child(path: Path, parent: Path) -> bool:
     return path.parent.resolve() == parent.resolve()
 
 
-def prompt_new_project_name(message: str = "新项目名称", default: Optional[str] = None) -> str:
+def prompt_new_project_name(message: Optional[str] = None, default: Optional[str] = None) -> str:
+    if message is None:
+        message = t("project.new_name_prompt")
     current_message = message
     current_default = default
     while True:
         project = prompt(current_message, default=current_default).strip()
         if not project:
-            warn("项目名称不能为空，请重新输入。")
-            current_message = "重新输入项目名称"
+            warn(t("project.name_empty"))
+            current_message = t("project.name_retry")
             current_default = None
             continue
         if (_projects_root() / project).exists():
-            warn(f"项目已存在: projects/{project}，请重新输入。")
-            current_message = "重新输入项目名称"
+            warn(t("project.exists", project=project))
+            current_message = t("project.name_retry")
             current_default = None
             continue
         return project
@@ -132,7 +226,7 @@ def _summarize_project(name: str) -> Dict[str, Any]:
     elif info_obj.last_step:
         progress = f"{info_obj.last_step}"
     else:
-        progress = "未开始"
+        progress = t("project.not_started")
     info_dict["progress"] = progress
     info_dict["last_active"] = _short_time(info_obj.get("last_step_at"))
     return info_dict
@@ -149,18 +243,18 @@ def _project_kv(project: str) -> List[Tuple[str, str]]:
     from project_info import get_project_info
     info_obj = get_project_info(project)
     if not info_obj:
-        return [("项目", project), ("状态", "无 .project_info.json")]
+        return [(t("delete.project"), project), (t("project.status"), t("project.no_info"))]
     data = info_obj.to_dict()
     return [
-        ("项目",   data.get("project_name", project)),
-        ("题材",   str(data.get("genre", "—"))),
-        ("小说名", str(data.get("novel_name") or "未设置")),
-        ("方案",   str(data.get("selected_option") or "未选")),
-        ("参考",   str(data.get("ref_works") or "无")),
-        ("轮次",   f"R{data.get('current_round', 1)}"
-                   + (f" / 总 {data.get('total_chapters', '?')} 章" if data.get('total_chapters') else "")),
-        ("最后步骤", str(data.get("last_step") or "无")),
-        ("上次执行", _short_time(data.get("last_step_at"))),
+        (t("delete.project"), data.get("project_name", project)),
+        (t("project.col_genre"), str(data.get("genre", "—"))),
+        (t("project.novel_name"), str(data.get("novel_name") or t("project.unset"))),
+        (t("project.option"), str(data.get("selected_option") or t("project.unselected"))),
+        (t("project.reference"), str(data.get("ref_works") or t("common.none"))),
+        (t("project.round"), f"R{data.get('current_round', 1)}"
+                   + (t("common.total_chapters", count=data.get('total_chapters', '?')) if data.get('total_chapters') else "")),
+        (t("project.last_step"), str(data.get("last_step") or t("common.none"))),
+        (t("project.last_run"), _short_time(data.get("last_step_at"))),
     ]
 
 
@@ -178,7 +272,7 @@ def detect_genre_from_project(project_name: str) -> str:
 def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
     """项目选择：列表里选一个，或创建新项目。返回 (project, genre)。"""
     clear()
-    print_banner("选择项目", subtitle="选择已有项目继续，或创建新项目")
+    print_banner(t("project.select_title"), subtitle=t("project.select_subtitle"))
 
     projects = list_existing_projects()
     if projects:
@@ -192,10 +286,10 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
             genre = detect_genre_from_project(project)
             return (project, genre)
     else:
-        info("暂无已有项目，将创建新项目。")
+        info(t("project.none_create"))
 
     # 创建新项目
-    print_section("创建新项目", color=C.ACCENT)
+    print_section(t("project.create_section"), color=C.ACCENT)
     project = prompt_new_project_name()
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
@@ -206,10 +300,11 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
                         target_word_count=cli_module.size_to_word_count(novel_size))
     WorkflowRunner(project, genre, novel_size=novel_size,
                    target_word_count=cli_module.size_to_word_count(novel_size),
-                   provider=_current_provider)
-    success(f"项目已创建: {project}")
-    info(f"补充说明：{user_description}")
-    info(f"小说规模：{novel_size}")
+                   provider=_current_provider,
+                   language=_current_language)
+    success(t("project.created", project=project))
+    info(t("project.description", description=user_description))
+    info(t("project.size", size=novel_size))
 
     global _pending_user_description, _pending_novel_size
     _pending_user_description = user_description
@@ -228,35 +323,50 @@ def single_step_mode() -> None:
     project, genre = result
 
     clear()
-    print_banner("单步执行", subtitle=f"项目 {project} · 题材 {genre} · 后端 {_provider_label()}")
-    print_subheader("项目信息", color=C.PRIMARY)
+    print_banner(
+        t("single.title"),
+        subtitle=t(
+            "single.subtitle",
+            project=project,
+            genre=genre,
+            language=_language_label(),
+            provider=_provider_label(),
+        ),
+    )
+    print_subheader(t("single.project_info"), color=C.PRIMARY)
     print_kv(_project_kv(project))
 
-    steps = list(STEP_NAMES.items())
-    print_steps_table(steps, title="可用步骤")
-    step = prompt("请输入步骤编号", default="01").strip()
+    steps = [(step, step_name(step)) for step in STEP_NAMES]
+    print_steps_table(steps, title=t("single.steps_title"))
+    step = prompt(t("single.step_prompt"), default="01").strip()
     if not step or step not in STEP_NAMES:
-        warn("无效步骤编号。")
+        warn(t("single.invalid_step"))
         return
 
-    dry_run = confirm(f"干运行（不实际调用 {_provider_label()}）?", default=False)
-    option_count_raw = prompt("创意方案数量", default="3")
+    dry_run = confirm(t("single.dry_run_prompt", provider=_provider_label()), default=False)
+    option_count_raw = prompt(t("single.option_count_prompt"), default="3")
     option_count = int(option_count_raw) if option_count_raw.isdigit() else 3
 
-    print_section(f"执行 步骤 {step}  {STEP_NAMES[step]}", color=C.PRIMARY)
-    runner = WorkflowRunner(project, genre, dry_run=dry_run, provider=_current_provider)
+    print_section(t("single.run_section", step=step, name=step_name(step)), color=C.PRIMARY)
+    runner = WorkflowRunner(project, genre, dry_run=dry_run,
+                            provider=_current_provider,
+                            language=_current_language)
 
     if step == "01" and option_count > 1:
         for i in range(option_count):
-            note(f"方案 {i+1}/{option_count}")
+            note(t("single.option_note", current=i + 1, total=option_count))
             if not runner.run_step("01", runner.make_display_id(f"creative_option_{i+1}"), option_index=i+1):
-                error(f"方案 {i+1} 生成失败")
+                error(t("single.option_failed", index=i + 1))
                 press_enter()
                 return
-        chosen = select("选择一个创意方案", [f"方案 {i+1}" for i in range(option_count)], default=0)
-        success(f"已选择方案 {chosen + 1}")
+        chosen = select(
+            t("single.choose_creative"),
+            [t("single.creative_option", index=i + 1) for i in range(option_count)],
+            default=0,
+        )
+        success(t("single.creative_chosen", index=chosen + 1))
         if not runner.run_step("02", runner.make_display_id(f"creative_option_{chosen+1}"), option_index=chosen+1):
-            error("创意方案补充失败")
+            error(t("single.supplement_failed"))
     else:
         display_id = runner.make_display_id(step)
         runner.run_step(step, display_id)
@@ -267,31 +377,32 @@ def single_step_mode() -> None:
 def full_loop_mode() -> None:
     """完整执行模式。"""
     clear()
-    print_banner("完整执行", subtitle="一键跑完 创意 → 世界观 → 主轴 → 正文")
+    print_banner(t("full.title"), subtitle=t("full.subtitle"))
 
-    project = prompt_new_project_name("项目名称", default="my_novel")
+    project = prompt_new_project_name(t("full.project_prompt"), default="my_novel")
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
     novel_size = cli_module.ask_novel_size()
     target_word_count = cli_module.size_to_word_count(novel_size)
-    option_count_raw = prompt("创意方案数量", default="3")
+    option_count_raw = prompt(t("full.option_count_prompt"), default="3")
     option_count = int(option_count_raw) if option_count_raw.isdigit() else 3
-    dry_run = confirm(f"干运行（不实际调用 {_provider_label()}）?", default=False)
+    dry_run = confirm(t("full.dry_run_prompt", provider=_provider_label()), default=False)
 
     # 配置摘要
     body = "\n".join([
-        f"项目         {project}",
-        f"题材         {genre}",
-        f"补充说明     {user_description}",
-        f"规模         {novel_size}（约 {target_word_count // 10_000} 万字）",
-        f"方案数       {option_count}",
-        f"后端         {_provider_label()}",
-        f"干运行       {'是' if dry_run else '否'}",
+        t("full.config_project", project=project),
+        t("full.config_genre", genre=genre),
+        t("full.config_description", description=user_description),
+        t("full.config_size", size=novel_size, words=target_word_count // 10_000),
+        t("full.config_options", count=option_count),
+        t("full.config_language", language=_language_label()),
+        t("full.config_provider", provider=_provider_label()),
+        t("full.config_dry_run", value=t("common.yes") if dry_run else t("common.no")),
     ])
-    print_panel("执行配置", body, color=C.ACCENT, icon=I.DIAMOND)
+    print_panel(t("full.config_title"), body, color=C.ACCENT, icon=I.DIAMOND)
 
-    if not confirm("确认开始?", default=True):
-        warn("已取消。")
+    if not confirm(t("common.confirm_start"), default=True):
+        warn(t("common.cancelled"))
         return
 
     cmd = [
@@ -302,6 +413,7 @@ def full_loop_mode() -> None:
         "--user-description", user_description,
         "--novel-size", novel_size,
         "--provider", _current_provider,
+        "--language", _current_language,
     ]
     if dry_run:
         cmd.append("--dry")
@@ -314,11 +426,11 @@ def continue_mode() -> None:
     from project_info import get_project_info
 
     clear()
-    print_banner("继续执行", subtitle="从上次中断的步骤接续")
+    print_banner(t("continue.title"), subtitle=t("continue.subtitle"))
 
     projects = list_existing_projects()
     if not projects:
-        warn("暂无已有项目，请先使用「完整执行」创建一个。")
+        warn(t("continue.no_projects"))
         return
 
     idx = select_project(projects, allow_new=False)
@@ -328,25 +440,26 @@ def continue_mode() -> None:
     info_obj = get_project_info(project)
 
     if not info_obj or not info_obj.last_step:
-        error("该项目没有中断点，请使用「完整执行」。")
+        error(t("continue.no_checkpoint"))
         press_enter()
         return
 
-    print_subheader(f"项目：{project}", color=C.PRIMARY)
+    print_subheader(t("continue.project_header", project=project), color=C.PRIMARY)
     print_kv([
-        ("当前轮次", str(info_obj.current_round)),
-        ("中断步骤", info_obj.last_step or "无"),
-        ("中断时间", _short_time(info_obj.last_step_at)),
+        (t("continue.current_round"), str(info_obj.current_round)),
+        (t("continue.last_step"), info_obj.last_step or t("common.none")),
+        (t("continue.last_time"), _short_time(info_obj.last_step_at)),
     ])
 
-    if not confirm("确认继续?", default=True):
-        warn("已取消。")
+    if not confirm(t("common.confirm_continue"), default=True):
+        warn(t("common.cancelled"))
         return
 
     cmd = [
         sys.executable, "run_workflow.py", "continue",
         "--project-name", project,
         "--provider", _current_provider,
+        "--language", _current_language,
     ]
     subprocess.run(cmd)
     press_enter()
@@ -358,17 +471,17 @@ def continue_mode() -> None:
 def delete_project_mode() -> None:
     """删除小说项目目录和对应日志目录。"""
     clear()
-    print_banner("删除项目", subtitle="批量删除 projects/<项目名> 和 logs/<项目名>", accent=C.ERROR)
+    print_banner(t("delete.title"), subtitle=t("delete.subtitle"), accent=C.ERROR)
 
     projects = list_existing_projects()
     if not projects:
-        warn("暂无已有项目。")
+        warn(t("delete.no_projects"))
         press_enter()
         return
 
     project_names = select_projects(projects)
     if not project_names:
-        warn("已取消。")
+        warn(t("common.cancelled"))
         press_enter()
         return
 
@@ -383,41 +496,41 @@ def delete_project_mode() -> None:
             parent = _projects_root() if path == project_path else _logs_root()
             targets.append((project_name, path, parent))
 
-    print_subheader("待删除项目", color=C.ERROR)
+    print_subheader(t("delete.pending_title"), color=C.ERROR)
     for project_name, project_path, log_path, _ in entries:
         print_kv([
-            ("项目", project_name),
-            ("项目目录", str(project_path) if project_path.exists() else f"{project_path}（不存在）"),
-            ("日志目录", str(log_path) if log_path.exists() else f"{log_path}（不存在）"),
+            (t("delete.project"), project_name),
+            (t("delete.project_dir"), str(project_path) if project_path.exists() else f"{project_path}{t('delete.missing_suffix')}"),
+            (t("delete.log_dir"), str(log_path) if log_path.exists() else f"{log_path}{t('delete.missing_suffix')}"),
         ])
         blank()
 
     if not targets:
-        warn("项目目录和日志目录都不存在，无需删除。")
+        warn(t("delete.no_targets"))
         press_enter()
         return
 
     for _, path, parent in targets:
         if not path.is_dir() or not _is_direct_child(path, parent):
-            error(f"拒绝删除异常路径: {path}")
+            error(t("delete.reject_path", path=path))
             press_enter()
             return
 
-    warn("此操作会永久删除项目产物和运行日志，无法从菜单内恢复。")
-    if not confirm(f"确认删除选中的 {len(project_names)} 个项目?", default=False):
-        warn("已取消。")
+    warn(t("delete.warning"))
+    if not confirm(t("delete.confirm", count=len(project_names)), default=False):
+        warn(t("common.cancelled"))
         press_enter()
         return
 
-    typed = prompt("请输入 DELETE 以确认批量删除", show_default=False)
+    typed = prompt(t("delete.type_confirm"), show_default=False)
     if typed != "DELETE":
-        error("确认文本不匹配，已取消删除。")
+        error(t("delete.confirm_mismatch"))
         press_enter()
         return
 
     for project_name, path, _ in targets:
         shutil.rmtree(path)
-        success(f"已删除 [{project_name}]: {path}")
+        success(t("delete.deleted", project=project_name, path=path))
 
     press_enter()
 
@@ -427,17 +540,71 @@ def delete_project_mode() -> None:
 # ---------------------------------------------------------------------------
 def view_steps_list() -> None:
     clear()
-    print_banner("步骤列表", subtitle="step 编号 → 中文名")
-    print_steps_table(list(STEP_NAMES.items()), title="完整步骤")
+    print_banner(t("steps.title"), subtitle=t("steps.subtitle"))
+    print_steps_table([(step, step_name(step)) for step in STEP_NAMES], title=t("steps.table_title"))
     print_kv([
-        ("01-02",   "创意方案（生成 + 补充）"),
-        ("03-04",   "世界观 + 人物"),
-        ("05+05a+05b", "主轴 + 幕次框架 + 核心骨架"),
-        ("06-10",   "开篇（剧情→梗概→指南→正文→状态）"),
-        ("11-16",   "每轮创作循环"),
-        ("17",      "幕次末精简"),
-        ("18",      "项目根 CLAUDE.md"),
+        ("01-02",   t("steps.range_01_02")),
+        ("03-04",   t("steps.range_03_04")),
+        ("05+05a+05b", t("steps.range_05")),
+        ("06-10",   t("steps.range_06_10")),
+        ("11-16",   t("steps.range_11_16")),
+        ("17",      t("steps.range_17")),
+        ("18",      t("steps.range_18")),
     ], key_color=C.ACCENT)
+    press_enter()
+
+
+# ---------------------------------------------------------------------------
+# 系统设置
+# ---------------------------------------------------------------------------
+def settings_mode() -> None:
+    """系统设置：修改菜单会话使用的语言和外部 CLI 架构。"""
+    global _current_provider, _current_language
+
+    clear()
+    print_banner(
+        t("settings.title"),
+        subtitle=t("settings.subtitle", language=_language_label(), provider=_provider_label()),
+    )
+    print_kv([
+        (t("settings.current_language"), _language_label()),
+        (t("settings.current_provider"), _provider_label()),
+        (t("settings.config_file"), str(CONFIG_FILE)),
+    ])
+
+    options = [
+        t("settings.change_language"),
+        t("settings.change_provider"),
+        t("settings.back"),
+    ]
+    idx = select(t("settings.prompt"), options, default=0)
+    if idx == 2:
+        return
+
+    if idx == 0:
+        selected_language = choose_language(_current_language)
+        if selected_language == _current_language:
+            info(t("settings.language_unchanged", language=_language_label()))
+            press_enter()
+            return
+
+        _current_language = selected_language
+        i18n_module.set_language(_current_language)
+        cli_module.set_language(_current_language)
+        if _save_configured_language(_current_language):
+            success(t("settings.language_changed", language=_language_label()))
+        press_enter()
+        return
+
+    selected_provider = choose_provider(_current_provider)
+    if selected_provider == _current_provider:
+        info(t("settings.provider_unchanged", provider=_provider_label()))
+        press_enter()
+        return
+
+    _current_provider = selected_provider
+    if _save_configured_provider(_current_provider):
+        success(t("settings.provider_changed", provider=_provider_label()))
     press_enter()
 
 
@@ -447,11 +614,11 @@ def view_steps_list() -> None:
 def export_mode() -> None:
     """导出小说为 md / txt / epub 格式。"""
     clear()
-    print_banner("导出小说", subtitle="合并 02_output 章节，导出为多格式")
+    print_banner(t("export.title"), subtitle=t("export.subtitle"))
 
     projects = list_existing_projects()
     if not projects:
-        warn("暂无已有项目。")
+        warn(t("export.no_projects"))
         press_enter()
         return
 
@@ -464,22 +631,22 @@ def export_mode() -> None:
     output_dir = project_path / "02_output"
 
     if not output_dir.exists():
-        error(f"目录不存在: {output_dir}")
+        error(t("export.missing_dir", path=output_dir))
         press_enter()
         return
 
     # 收集正文文件
     chapters: List[Tuple[int, Path]] = []
     for f in output_dir.iterdir():
-        if f.is_file() and f.suffix == ".md" and f.stem.startswith("正文v"):
+        if f.is_file() and f.suffix == ".md" and (f.stem.startswith("正文v") or f.stem.startswith("Draft_v")):
             try:
-                version = int(f.stem.replace("正文v", ""))
+                version = int(f.stem.replace("正文v", "").replace("Draft_v", ""))
                 chapters.append((version, f))
             except ValueError:
                 pass
 
     if not chapters:
-        error("未找到任何正文章节文件。")
+        error(t("export.no_chapters"))
         press_enter()
         return
 
@@ -488,23 +655,28 @@ def export_mode() -> None:
 
     novel_title = project_name  # 使用文件夹名作为小说名
 
-    print_subheader(f"项目: {project_name}", color=C.PRIMARY)
+    print_subheader(t("export.project_header", project=project_name), color=C.PRIMARY)
     print_kv([
-        ("小说名", novel_title),
-        ("章节数", str(total)),
-        ("来源目录", str(output_dir)),
+        (t("export.novel_name"), novel_title),
+        (t("export.chapter_count"), str(total)),
+        (t("export.source_dir"), str(output_dir)),
     ])
 
     # 选择导出格式
-    format_options = ["全部格式 (md + txt + epub)", "仅 MD", "仅 TXT", "仅 EPUB"]
-    fmt_idx = select("选择导出格式", format_options, default=0)
+    format_options = [
+        t("export.format_all"),
+        t("export.format_md"),
+        t("export.format_txt"),
+        t("export.format_epub"),
+    ]
+    fmt_idx = select(t("export.format_prompt"), format_options, default=0)
 
     export_md = fmt_idx in (0, 1)
     export_txt = fmt_idx in (0, 2)
     export_epub = fmt_idx in (0, 3) and HAS_EBOOKLIB
 
     if fmt_idx == 3 and not HAS_EBOOKLIB:
-        warn("系统未安装 ebooklib 库，EPUB 导出不可用。")
+        warn(t("export.epub_unavailable"))
 
     # 合并内容
     merged_content = ""
@@ -543,7 +715,7 @@ def export_mode() -> None:
             chapter_content = fpath.read_text(encoding="utf-8")
             # 简单处理：提取标题
             lines = chapter_content.split("\n")
-            chapter_title = f"第{i}章"
+            chapter_title = t("ui.chapter_title", index=i)
             for line in lines:
                 if line.strip().startswith("#"):
                     chapter_title = line.strip().lstrip("#").strip()
@@ -577,15 +749,15 @@ def export_mode() -> None:
             epub.write_epub(str(epub_path), book, {})
             results.append(("EPUB", str(epub_path)))
         except Exception as e:
-            warn(f"EPUB 导出失败: {e}")
+            warn(t("export.epub_failed", error=e))
 
     # 输出结果
-    print_section("导出完成", color=C.SUCCESS)
+    print_section(t("export.done"), color=C.SUCCESS)
     for fmt, path in results:
         success(f"{fmt} → {path}")
 
     if not results:
-        error("未生成任何文件。")
+        error(t("export.no_outputs"))
 
     press_enter()
 
@@ -594,34 +766,66 @@ def export_mode() -> None:
 # 主菜单
 # ---------------------------------------------------------------------------
 def main() -> None:
-    global _current_provider
+    global _current_provider, _current_language
     init()
-    _current_provider = choose_provider()
+    config = _load_menu_config()
+    has_language = _has_configured_language(config)
+    has_provider = _has_configured_provider(config)
+    _current_language = _normalize_language(config.get("language"))
+    i18n_module.set_language(_current_language)
+    _current_provider = _normalize_provider(config.get("provider"))
+
+    if not has_language:
+        _current_language = choose_language(_current_language)
+        config["language"] = _current_language
+
+    i18n_module.set_language(_current_language)
+    cli_module.set_language(_current_language)
+
+    if not has_provider:
+        _current_provider = choose_provider(_current_provider)
+        config["provider"] = _current_provider
+
+    if not has_language or not has_provider:
+        _save_menu_config(config)
+
     while True:
         clear()
-        print_banner("woke_novel 工作流", subtitle=f"中文网文 · {_provider_label()} 驱动")
-        print_subheader("请选择功能", color=C.PRIMARY)
+        print_banner(
+            t("app.title"),
+            subtitle=t("main.subtitle", language=_language_label(), provider=_provider_label()),
+        )
+        print_subheader(t("main.choose_feature"), color=C.PRIMARY)
         options = [
-            "单步执行   跑一个指定步骤（试运行 / 修复）",
-            "完整执行   一键跑完整个流水线",
-            "继续执行   从中断点接续",
-            "查看步骤   步骤编号 + 中文名",
-            "导出小说   合并 02_output 导出 md/txt/epub",
-            "删除项目   删除小说项目和对应日志",
-            "退出",
+            t("main.single_option"),
+            t("main.full_option"),
+            t("main.continue_option"),
+            t("main.steps_option"),
+            t("main.export_option"),
+            t("main.delete_option"),
+            t("main.settings_option"),
+            t("main.exit_option"),
         ]
-        idx = select("主菜单", options, default=0)
-        actions = [single_step_mode, full_loop_mode, continue_mode, view_steps_list, export_mode, delete_project_mode]
-        if idx == 6:
-            print_panel("再见", "下次再写！", color=C.ACCENT, icon=I.STAR)
+        idx = select(t("main.menu_prompt"), options, default=0)
+        actions = [
+            single_step_mode,
+            full_loop_mode,
+            continue_mode,
+            view_steps_list,
+            export_mode,
+            delete_project_mode,
+            settings_mode,
+        ]
+        if idx == 7:
+            print_panel(t("main.goodbye_title"), t("main.goodbye_body"), color=C.ACCENT, icon=I.STAR)
             break
         try:
             actions[idx]()
         except KeyboardInterrupt:
-            warn("已取消。")
+            warn(t("common.cancelled"))
             press_enter()
         except Exception as e:
-            error(f"未捕获异常: {e}")
+            error(t("common.uncaught", error=e))
             press_enter()
 
 

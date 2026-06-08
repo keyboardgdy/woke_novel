@@ -13,6 +13,7 @@ LOGS_ROOT = Path(__file__).resolve().parent / "logs"
 
 # 规则文件根目录（相对于当前脚本目录）
 RULES_ROOT = Path(__file__).parent / "steps"
+RULES_ROOT_EN = Path(__file__).parent / "steps_en"
 
 
 # 步骤到文件的映射
@@ -39,16 +40,43 @@ STEP_FILE_MAP = {
     "18": "18 项目级 CLAUDE.md.md",
 }
 
+STEP_FILE_MAP_EN = {
+    "01": "01 Creative Proposal Generation.md",
+    "02": "02 Creative Proposal Supplement.md",
+    "03": "03 Worldbuilding and Setting Generation.md",
+    "04": "04 Character Profiles and Relationship Matrix.md",
+    "05": "05 Story Axis.md",
+    "05a": "05a Act Framework.md",
+    "05b": "05b Act Core Skeleton.md",
+    "06": "06 Opening Plot Direction Extraction.md",
+    "07": "07 Opening Chapter Synopsis.md",
+    "08": "08 Opening Writing Guide.md",
+    "09": "09 Opening Chapter Draft.md",
+    "10": "10 State Document.md",
+    "11": "11 Plot Direction Guidance.md",
+    "12": "12 Plot Synopsis Design.md",
+    "13": "13 Writing Guide.md",
+    "14": "14 Chapter Draft.md",
+    "15": "15 State Document.md",
+    "16": "16 Story Summary Compression.md",
+    "17": "17 Act-Level Story Summary Compression.md",
+    "18": "18 Project-Level CLAUDE.md.md",
+}
+
 
 class PathResolver:
     """路径解析器 - 将项目级变量转换为绝对路径"""
 
     def __init__(self, project_name: str, genre: str = "都市",
-                 novel_size: str = "中篇", target_word_count: int = 300_000):
+                 novel_size: str = "中篇", target_word_count: int = 300_000,
+                 language: str = "zh"):
         self.project_name = project_name
         self.genre = genre
         self.novel_size = novel_size
         self.target_word_count = target_word_count
+        self.language = "en" if (language or "zh").strip().lower() == "en" else "zh"
+        self.rules_root = RULES_ROOT_EN if self.language == "en" else RULES_ROOT
+        self.step_file_map = STEP_FILE_MAP_EN if self.language == "en" else STEP_FILE_MAP
         self.project_root = PROJECTS_ROOT / project_name
 
         # 子目录（日志目录 logs/<name>/ 在仓库根，由 LOGS_ROOT 单独管理，不在这里建）
@@ -88,18 +116,37 @@ class PathResolver:
         result = result.replace("{round-1}", prev_r)
         result = result.replace("{option_index}", opt_idx)
         result = result.replace("{user_description}", user_description)
-        result = result.replace("{novel_size}", novel_size or self.novel_size or "中篇")
+        size_label = novel_size or self.novel_size or "中篇"
+        if self.language == "en":
+            size_label = {
+                "短篇": "Short novel",
+                "中篇": "Medium-length novel",
+                "长篇": "Long novel",
+                "超长篇": "Very long novel",
+            }.get(size_label, size_label)
+        result = result.replace("{novel_size}", size_label)
         # 渲染成中文「X万字」，方便人读；底层整数还是 target_word_count
         _wc = target_word_count or self.target_word_count or 300_000
-        result = result.replace("{target_word_count}", f"{_wc // 10_000}万字")
+        target_words = f"{_wc:,} words" if self.language == "en" else f"{_wc // 10_000}万字"
+        result = result.replace("{target_word_count}", target_words)
         result = result.replace("{act_num}", str(kwargs.get("act_num") or ""))
         act_num = kwargs.get("act_num")
+        if self.language == "en":
+            prev_skeleton_name = f"Core_Skeleton_{act_num - 1}.md" if act_num is not None else "Core_Skeleton_1.md"
+            current_skeleton_name = f"Core_Skeleton_{act_num or 1}.md"
+            read_prefix = "Read"
+            prev_note = "previous act core skeleton, for continuity reference only"
+        else:
+            prev_skeleton_name = f"核心骨架_{act_num - 1}.md" if act_num is not None else "核心骨架_1.md"
+            current_skeleton_name = f"核心骨架_{act_num or 1}.md"
+            read_prefix = "读取"
+            prev_note = "上一幕核心骨架,仅作为连贯性参考"
         if act_num is not None and act_num > 1:
-            result = result.replace("{prev_act_skeleton}", f"读取：{p}/00_baseline/核心骨架_{act_num - 1}.md（上一幕核心骨架,仅作为连贯性参考）")
-            result = result.replace("{act_skeleton}", f"读取：{p}/00_baseline/核心骨架_{act_num}.md")
+            result = result.replace("{prev_act_skeleton}", f"{read_prefix}: {p}/00_baseline/{prev_skeleton_name} ({prev_note})")
+            result = result.replace("{act_skeleton}", f"{read_prefix}: {p}/00_baseline/{current_skeleton_name}")
         else:
             result = result.replace("{prev_act_skeleton}", "")
-            result = result.replace("{act_skeleton}", f"读取：{p}/00_baseline/核心骨架_1.md")
+            result = result.replace("{act_skeleton}", f"{read_prefix}: {p}/00_baseline/{current_skeleton_name}")
         if ref_works is not None:
             result = result.replace("{ref_works}", ref_works)
         # 步骤 18 阶段标识：post_05b（开篇前）或 post_17（每幕末）
@@ -107,14 +154,28 @@ class PathResolver:
 
         # ========== 00_baseline 目录 ==========
         result = result.replace("{baseline}", p + "/00_baseline")
-        result = result.replace("{world}", p + "/00_baseline/世界观.md")
-        result = result.replace("{skeleton}", p + "/00_baseline/故事主轴.md")
-        result = result.replace("{axis}", p + "/00_baseline/故事主轴.md")
-        result = result.replace("{macro}", p + "/00_baseline/幕次框架.md")
-        result = result.replace("{constitution}", str(RULES_ROOT / "00 创作宪法.md").replace("\\", "/"))
-        result = result.replace("{evolution}", str(RULES_ROOT / "00 故事演化核心原则.md").replace("\\", "/"))
-        result = result.replace("{craft_errors}", str(RULES_ROOT / "00 AI通用文字技法错误清单.md").replace("\\", "/"))
-        result = result.replace("{steps}", str(RULES_ROOT).replace("\\", "/"))
+        if self.language == "en":
+            result = result.replace("{world}", p + "/00_baseline/Worldbuilding.md")
+            result = result.replace("{skeleton}", p + "/00_baseline/Story_Axis.md")
+            result = result.replace("{axis}", p + "/00_baseline/Story_Axis.md")
+            result = result.replace("{macro}", p + "/00_baseline/Act_Framework.md")
+        else:
+            result = result.replace("{world}", p + "/00_baseline/世界观.md")
+            result = result.replace("{skeleton}", p + "/00_baseline/故事主轴.md")
+            result = result.replace("{axis}", p + "/00_baseline/故事主轴.md")
+            result = result.replace("{macro}", p + "/00_baseline/幕次框架.md")
+        if self.language == "en":
+            constitution = "00 Creative Constitution.md"
+            evolution = "00 Story Evolution Core Principles.md"
+            craft_errors = "00 AI General Prose Craft Error Checklist.md"
+        else:
+            constitution = "00 创作宪法.md"
+            evolution = "00 故事演化核心原则.md"
+            craft_errors = "00 AI通用文字技法错误清单.md"
+        result = result.replace("{constitution}", str(self.rules_root / constitution).replace("\\", "/"))
+        result = result.replace("{evolution}", str(self.rules_root / evolution).replace("\\", "/"))
+        result = result.replace("{craft_errors}", str(self.rules_root / craft_errors).replace("\\", "/"))
+        result = result.replace("{steps}", str(self.rules_root).replace("\\", "/"))
 
         # ========== 04_characters 目录 ==========
         result = result.replace("{chars}", p + "/04_characters")
@@ -135,16 +196,16 @@ class PathResolver:
 
     def get_step_file_path(self, step_name: str) -> Path:
         """获取步骤模板文件路径"""
-        if step_name in STEP_FILE_MAP:
-            return RULES_ROOT / STEP_FILE_MAP[step_name]
-        return RULES_ROOT / f"{step_name}.md"
+        if step_name in self.step_file_map:
+            return self.rules_root / self.step_file_map[step_name]
+        return self.rules_root / f"{step_name}.md"
 
     def load_step_template(self, step_name: str) -> str:
         """加载步骤模板"""
         step_file = self.get_step_file_path(step_name)
         if not step_file.exists():
             simplified = re.sub(r'^\d+\s*', '', step_name).strip()
-            step_file = RULES_ROOT / (simplified + ".md")
+            step_file = self.rules_root / (simplified + ".md")
 
         with open(step_file, 'r', encoding='utf-8') as f:
             return f.read()

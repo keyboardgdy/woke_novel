@@ -41,6 +41,8 @@ projects/*/*
 # ====== 工具/编辑器自身配置 ======
 # Claude Code 本地配置
 .claude/
+# 菜单本地偏好（例如默认 CLI 架构）
+.menu_config.json
 # Obsidian 库配置
 .obsidian/
 # VS Code / Cursor

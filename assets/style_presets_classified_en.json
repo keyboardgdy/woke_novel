@@ -1,0 +1,788 @@
+{
+  "genre_fiction": {
+    "name": "Genre Fiction",
+    "desc": "Commercial international fiction built around clear hooks, strong plot momentum, genre conventions, and reader expectations.",
+    "genres": {
+      "fantasy": {
+        "name": "Fantasy",
+        "desc": "Fiction shaped by magic, myth, secondary worlds, and non-realistic rules, with emphasis on wonder, destiny, adventure, and transformation.",
+        "themes": [
+          {
+            "id": "epic_quest",
+            "name": "Epic Quest",
+            "desc": "A large-scale journey across lands and cultures, in the mode of The Lord of the Rings. Ordinary characters are drawn into a world-level crisis, the party members carry distinct roles, and the route reveals history, myth, and rival peoples. The emotional payoff comes from sacrifice, endurance, and the restoration or remaking of order."
+          },
+          {
+            "id": "high_fantasy_court",
+            "name": "Court Intrigue Fantasy",
+            "desc": "Royal succession, magical power, alliances, and betrayal drive the story. In the spirit of multi-faction epic fantasy, houses and courts compete for territory, legitimacy, and resources. The appeal comes from reversals, hidden motives, and the cost of gaining power."
+          },
+          {
+            "id": "low_fantasy_intrusion",
+            "name": "Intrusion Fantasy",
+            "desc": "The ordinary world is breached by hidden magic, old gods, or impossible rules. Familiar streets, workplaces, and families become unstable once the supernatural enters. Tension comes from the clash between everyday logic and an older, stranger reality."
+          },
+          {
+            "id": "magic_academy_en",
+            "name": "Magic Academy",
+            "desc": "A school setting carries the growth arc through classes, tests, houses, rivalries, friendships, and forbidden knowledge. Daily learning alternates with a larger mystery or threat. Reader pleasure comes from belonging, discovery, competition, and the slow unveiling of darker truths."
+          },
+          {
+            "id": "grimdark_fantasy",
+            "name": "Grimdark Fantasy",
+            "desc": "A morally gray world where violence has consequences and heroism is constantly questioned. Characters pursue survival, ambition, loyalty, or revenge without clean moral certainty. The power of the story comes from hard choices, corrosive victories, and the weight of compromise."
+          },
+          {
+            "id": "cozy_fantasy",
+            "name": "Cozy Fantasy",
+            "desc": "A gentle fantasy mode that lowers the scale of war and catastrophe, foregrounding daily life, community, repair, food, craft, friendship, and emotional healing. Conflicts are personal and manageable, and the charm comes from warmth inside an enchanted world."
+          },
+          {
+            "id": "urban_fantasy",
+            "name": "Urban Fantasy",
+            "desc": "Magic, supernatural beings, hidden societies, or mythic forces operate inside a modern city. The protagonist often navigates both ordinary institutions and secret magical politics. The appeal comes from noir energy, contemporary voice, supernatural conflict, and the discovery of hidden rules beneath everyday life."
+          },
+          {
+            "id": "dark_academia_fantasy",
+            "name": "Dark Academia Fantasy",
+            "desc": "Elite schools, ancient languages, secret societies, forbidden books, ritual, ambition, class anxiety, and intellectual obsession create a moody academic fantasy. The danger comes from knowledge pursued too far and from institutions that hide beauty, privilege, and violence."
+          },
+          {
+            "id": "progression_fantasy",
+            "name": "Progression Fantasy",
+            "desc": "The protagonist grows measurably stronger through training, cultivation, levels, ranks, skills, magic systems, trials, or combat advancement. Reader satisfaction comes from clear improvement, strategic learning, escalating opponents, and the visible accumulation of power."
+          },
+          {
+            "id": "litrpg_gamelit",
+            "name": "LitRPG and GameLit",
+            "desc": "Game mechanics such as levels, stats, classes, quests, skills, loot, dungeons, respawns, or system messages shape the narrative. The pleasure comes from measurable progress, tactical choices, reward loops, and the fusion of adventure with game logic."
+          }
+        ]
+      },
+      "science_fiction": {
+        "name": "Science Fiction",
+        "desc": "Fiction driven by scientific speculation, technology, future societies, alien contact, or altered human conditions.",
+        "themes": [
+          {
+            "id": "space_opera",
+            "name": "Space Opera",
+            "desc": "Interstellar politics, fleet conflict, dynastic ambition, religion, trade, and planetary ecology shape a vast narrative. The scale is imperial and civilizational, with dramatic reversals and strategic choices determining the fate of worlds."
+          },
+          {
+            "id": "hard_sf_problem",
+            "name": "Hard SF Problem Solving",
+            "desc": "A scientific or engineering problem becomes the central engine of suspense. The protagonist survives through knowledge, calculation, experiment, and disciplined reasoning. The satisfaction comes from practical solutions that feel earned and verifiable."
+          },
+          {
+            "id": "cyberpunk_noir",
+            "name": "Cyberpunk Noir",
+            "desc": "High technology and low living standards define a shadowed city of corporations, hackers, surveillance, body modification, and information crime. The protagonist investigates truth in a neon underworld where identity and freedom are constantly for sale."
+          },
+          {
+            "id": "dystopian_society",
+            "name": "Dystopian Society",
+            "desc": "A controlled society uses language, surveillance, class, reproduction, labor, or memory to shape private life. The plot follows awakening, resistance, complicity, and the risk of failure. The pressure comes from a system that makes oppression feel normal."
+          },
+          {
+            "id": "first_contact",
+            "name": "First Contact",
+            "desc": "Humanity encounters alien intelligence for the first time. The central tension is not only danger but translation, perception, and the limits of human thought. The climax often changes how characters understand language, time, selfhood, or civilization."
+          },
+          {
+            "id": "time_paradox",
+            "name": "Time Paradox",
+            "desc": "Time travel, causal loops, altered histories, and predestination create structural suspense. Events echo across timelines, and earlier scenes gain new meaning after later revelations. The pleasure comes from a plot that closes its own loops cleanly."
+          },
+          {
+            "id": "solarpunk",
+            "name": "Solarpunk",
+            "desc": "A hopeful ecological future emphasizes renewable technology, community design, sustainability, mutual aid, repair, and social imagination. Conflict remains present, but the genre asks how people might build livable systems rather than merely survive collapse."
+          },
+          {
+            "id": "space_colonization",
+            "name": "Space Colonization",
+            "desc": "Humans attempt to settle moons, planets, stations, or generation ships under technical, ecological, political, and psychological pressure. The story focuses on survival, governance, adaptation, resource conflict, and the meaning of home beyond Earth."
+          },
+          {
+            "id": "ai_consciousness",
+            "name": "AI Consciousness",
+            "desc": "Artificial intelligence, machine personhood, synthetic emotion, autonomy, memory, labor, rights, or control form the central speculative question. The plot explores whether intelligence deserves freedom, whether consciousness can be designed, and how humans respond to nonhuman minds."
+          }
+        ]
+      },
+      "mystery_thriller": {
+        "name": "Mystery and Thriller",
+        "desc": "Fiction organized around puzzles, danger, pursuit, hidden truth, suspicion, and escalating pressure.",
+        "themes": [
+          {
+            "id": "classic_whodunit",
+            "name": "Classic Whodunit",
+            "desc": "A fair-play puzzle in a limited social field, often with a closed setting and a clear suspect pool. Clues are visible but misdirected. The ending reorders everything through logic, and the pleasure comes from being fooled fairly."
+          },
+          {
+            "id": "psychological_thriller",
+            "name": "Psychological Thriller",
+            "desc": "The truth is hidden inside memory, obsession, unreliable narration, manipulation, or intimate relationships. Suspense grows as the reader loses confidence in what has been presented. The shock comes from discovering that ordinary emotional life was dangerous all along."
+          },
+          {
+            "id": "domestic_suspense",
+            "name": "Domestic Suspense",
+            "desc": "Marriage, family, neighbors, parenting, and respectable homes conceal secrets. Small details in ordinary life become clues. The appeal comes from danger inside familiar spaces and from the gradual collapse of a polished surface."
+          },
+          {
+            "id": "spy_thriller",
+            "name": "Spy Thriller",
+            "desc": "Intelligence work, false identities, betrayal, state pressure, and moral ambiguity drive the story. Action may be restrained, but the psychological stakes are high. The climax often turns on exposure, defection, or double betrayal."
+          },
+          {
+            "id": "legal_thriller",
+            "name": "Legal Thriller",
+            "desc": "Courtrooms, evidence, procedure, witnesses, and legal strategy form the battlefield. A case exposes a larger political or corporate threat. Momentum comes from investigation, hearings, procedural traps, and reversals inside the law."
+          },
+          {
+            "id": "survival_thriller",
+            "name": "Survival Thriller",
+            "desc": "A character is trapped in wilderness, disaster, captivity, a locked space, or a chase. Time, resources, injury, and fear keep narrowing the options. Suspense comes from choices that carry immediate and irreversible consequences."
+          },
+          {
+            "id": "cozy_mystery",
+            "name": "Cozy Mystery",
+            "desc": "A low-violence mystery usually set in a small town, village, shop, library, bakery, inn, or close community. An amateur sleuth investigates a murder or disappearance through gossip, observation, local knowledge, and social connection. The appeal comes from comfort, recurring characters, gentle humor, and a puzzle that feels safe rather than brutal."
+          },
+          {
+            "id": "political_thriller",
+            "name": "Political Thriller",
+            "desc": "Elections, government secrets, corruption, assassination threats, scandals, intelligence leaks, lobbying, or constitutional crises create escalating danger. The protagonist uncovers power operating behind public institutions, and the climax often forces a choice between truth, loyalty, and national stability."
+          },
+          {
+            "id": "conspiracy_thriller",
+            "name": "Conspiracy Thriller",
+            "desc": "A hidden organization, cover-up, cult, corporation, government faction, or secret network manipulates visible events. The protagonist begins with a small anomaly and discovers a larger pattern. Suspense comes from paranoia, pursuit, and the fear that no institution can be trusted."
+          },
+          {
+            "id": "techno_thriller",
+            "name": "Techno-Thriller",
+            "desc": "Advanced technology, cyberwarfare, weapons systems, AI, satellites, biotech, surveillance, or infrastructure failure drive the suspense. The plot depends on technical plausibility, strategic escalation, and the danger of systems humans no longer fully control."
+          },
+          {
+            "id": "medical_thriller",
+            "name": "Medical Thriller",
+            "desc": "Hospitals, laboratories, pandemics, drug trials, organ trafficking, genetic research, or medical ethics create danger. The protagonist may be a doctor, researcher, patient, journalist, or investigator. Suspense comes from bodily vulnerability, institutional secrecy, and the race to prevent harm."
+          },
+          {
+            "id": "military_thriller",
+            "name": "Military Thriller",
+            "desc": "Special operations, battlefield strategy, command decisions, weapons, covert missions, and geopolitical threats drive the story. The appeal comes from tactical detail, loyalty under pressure, moral cost, and the execution of high-risk operations."
+          },
+          {
+            "id": "action_thriller",
+            "name": "Action Thriller",
+            "desc": "Chases, fights, escapes, explosions, kidnappings, assassins, and ticking-clock missions provide fast momentum. Character depth may exist, but the main pleasure comes from physical danger, set pieces, reversals, and relentless escalation."
+          }
+        ]
+      },
+      "crime_noir": {
+        "name": "Crime and Noir",
+        "desc": "Fiction centered on crime, investigation, corruption, urban shadow, moral compromise, and the cost of violence.",
+        "themes": [
+          {
+            "id": "hardboiled_detective",
+            "name": "Hardboiled Detective",
+            "desc": "A tough, lonely investigator follows a case through a corrupt city. The voice is dry, observant, and cynical, but the protagonist keeps a private code. The appeal comes from moral stubbornness under a bruised exterior."
+          },
+          {
+            "id": "police_procedural",
+            "name": "Police Procedural",
+            "desc": "Realistic investigative work, team dynamics, evidence chains, interviews, forensics, paperwork, and institutional pressure shape the plot. Credibility comes from professional detail and from the everyday rhythm of solving a case."
+          },
+          {
+            "id": "serial_killer_hunt",
+            "name": "Serial Killer Hunt",
+            "desc": "Pattern recognition, profiling, forensic clues, and a ticking clock define the pursuit. The investigator must understand the killer's logic without being consumed by it. Fear comes from the possibility of the next victim."
+          },
+          {
+            "id": "heist_crime",
+            "name": "Heist Crew",
+            "desc": "Planning, specialists, timing, execution, and failure points drive the story. Each crew member has a skill and a liability. Pleasure comes from watching the plan work, while tension comes from greed, betrayal, bad luck, or one small mistake."
+          },
+          {
+            "id": "mafia_family",
+            "name": "Mafia Family",
+            "desc": "Organized crime is treated as family, inheritance, ritual, business, and power. Love and violence cannot be separated. The tragedy comes from characters trying to protect the family while being swallowed by its rules."
+          },
+          {
+            "id": "small_town_crime",
+            "name": "Small-Town Crime",
+            "desc": "A closed community hides old crimes, prejudice, shared silence, and private shame. Everyone knows everyone, which means everyone has a reason to lie. Suspense comes from exposing what the town has agreed not to say."
+          }
+        ]
+      },
+      "romance": {
+        "name": "Romance",
+        "desc": "Fiction centered on the formation, testing, repair, or loss of intimate love, with emphasis on emotional tension and relationship payoff.",
+        "themes": [
+          {
+            "id": "regency_romance",
+            "name": "Regency Romance",
+            "desc": "Balls, manners, inheritance, reputation, marriage markets, and class expectations shape the courtship. Characters negotiate desire under strict social rules. The conflict comes from choosing between security, duty, pride, and genuine affection."
+          },
+          {
+            "id": "contemporary_romcom",
+            "name": "Contemporary Romantic Comedy",
+            "desc": "Modern urban life, work, friendship, dating, and awkward misunderstandings create a light, fast-moving love story. Humor comes from contrasting personalities and social mishaps. The sweetness comes from being seen and understood."
+          },
+          {
+            "id": "second_chance_romance",
+            "name": "Second-Chance Romance",
+            "desc": "Former lovers meet again and must face the wound that separated them. The story is less about first attraction and more about trust, accountability, changed circumstances, and choosing each other with adult knowledge."
+          },
+          {
+            "id": "enemies_to_lovers",
+            "name": "Enemies to Lovers",
+            "desc": "Opposing goals, rival loyalties, or clashing personalities create charged conflict. Each argument reveals more truth. The emotional payoff comes when hostility turns into recognition, respect, vulnerability, and protection."
+          },
+          {
+            "id": "gothic_romance",
+            "name": "Gothic Romance",
+            "desc": "An isolated estate, a dangerous attraction, secrets, inheritance, and psychological unease mix love with suspense. The romantic pull is shadowed by fear. The protagonist must distinguish mystery, manipulation, and true feeling."
+          },
+          {
+            "id": "tragic_love",
+            "name": "Tragic Love",
+            "desc": "Love is crushed by era, class, illness, family, war, or fate. The stronger the feeling, the heavier the cost. The emotional force comes from characters choosing sincerity even when happiness cannot be preserved."
+          },
+          {
+            "id": "paranormal_romance",
+            "name": "Paranormal Romance",
+            "desc": "A romance involving vampires, werewolves, witches, ghosts, demons, angels, psychics, or other supernatural beings. The central engine remains the romantic relationship, while danger, secrecy, immortality, transformation, and forbidden identity heighten desire and conflict. In strict genre romance, the ending usually delivers an HEA or HFN."
+          },
+          {
+            "id": "small_town_romance",
+            "name": "Small-Town Romance",
+            "desc": "A close-knit town, local business, family reputation, gossip, festivals, and community rituals frame the love story. The romance develops inside a warm but watchful social world. The payoff includes not only emotional union but a sense of belonging and home."
+          },
+          {
+            "id": "fake_dating_romance",
+            "name": "Fake Dating",
+            "desc": "Two characters pretend to be romantically involved for family, work, publicity, money, immigration, revenge, or social convenience. The false performance creates real intimacy through staged affection, shared secrets, and blurred boundaries. The pleasure comes from watching the fake relationship become emotionally true."
+          },
+          {
+            "id": "forced_proximity_romance",
+            "name": "Forced Proximity",
+            "desc": "Two characters are trapped together by work, travel, weather, housing, family obligation, survival, or a shared mission. Limited space and repeated contact intensify attraction, conflict, vulnerability, and emotional exposure."
+          },
+          {
+            "id": "workplace_romance",
+            "name": "Workplace Romance",
+            "desc": "Professional ambition, office politics, collaboration, rivalry, power dynamics, and career risk shape the love story. The central tension comes from balancing desire with reputation, ethics, and long-term goals."
+          },
+          {
+            "id": "sports_romance",
+            "name": "Sports Romance",
+            "desc": "Athletes, coaches, trainers, agents, journalists, or fans are drawn into a romance shaped by competition, fame, injury, discipline, public image, and team loyalty. The emotional payoff often parallels a season, championship, comeback, or personal victory."
+          },
+          {
+            "id": "romantic_suspense",
+            "name": "Romantic Suspense",
+            "desc": "A central romance develops alongside danger, investigation, pursuit, crime, or conspiracy. The relationship and suspense plot intensify each other: trust becomes both emotional and practical, and the romantic payoff is tied to survival and the exposure of threat."
+          }
+        ]
+      },
+      "historical_adventure": {
+        "name": "Historical and Adventure",
+        "desc": "Fiction set in a specific historical period or driven by exploration, travel, war, survival, treasure, and action.",
+        "themes": [
+          {
+            "id": "historical_epic",
+            "name": "Historical Epic",
+            "desc": "Private lives unfold inside war, revolution, empire, migration, or national crisis. The story links public history with family, love, ambition, and loss. Grandeur comes from showing how eras magnify ordinary choices."
+          },
+          {
+            "id": "war_novel",
+            "name": "War Novel",
+            "desc": "Front-line experience, fear, loyalty, absurd command, injury, boredom, and moral damage define the narrative. The focus is not only victory or defeat, but how war changes the people who survive it."
+          },
+          {
+            "id": "nautical_adventure",
+            "name": "Nautical Adventure",
+            "desc": "Ships, storms, mutiny, distant ports, treasure, navigation, and crew loyalty create forward momentum. The setting is physically confined but imaginatively vast. Tension comes from nature, greed, discipline, and the unknown sea."
+          },
+          {
+            "id": "frontier_western",
+            "name": "Frontier Western",
+            "desc": "Border towns, open land, gunfighters, ranches, revenge, and weak law create a moral testing ground. Characters must define justice through action. The attraction lies in solitude, danger, restraint, and frontier survival."
+          },
+          {
+            "id": "colonial_encounter",
+            "name": "Colonial Encounter",
+            "desc": "Empire, trade, conquest, cultural misunderstanding, and unequal power shape the conflict. The story examines who records history and who is silenced by it. Tension comes from competing versions of civilization, ownership, and resistance."
+          },
+          {
+            "id": "archaeological_quest",
+            "name": "Archaeological Quest",
+            "desc": "Ancient ruins, lost documents, coded artifacts, rival expeditions, and international pursuit combine knowledge with action. The pleasure comes from decoding history, escaping danger, and revealing a buried truth."
+          },
+          {
+            "id": "historical_mystery",
+            "name": "Historical Mystery",
+            "desc": "A crime or secret is investigated within a specific historical period, where law, class, gender, technology, and social rules shape what can be known. The pleasure comes from combining period detail with fair clues and historical constraint."
+          },
+          {
+            "id": "historical_romance",
+            "name": "Historical Romance",
+            "desc": "A romance set in a past era where courtship, reputation, law, inheritance, war, class, or social codes shape desire. The central promise remains emotional union, while historical constraints intensify longing and choice."
+          },
+          {
+            "id": "biographical_fiction",
+            "name": "Biographical Fiction",
+            "desc": "The novel imagines the inner life, relationships, and private conflicts of a real historical figure. The appeal comes from blending documented history with emotional speculation, giving intimacy to lives known mostly through public record."
+          },
+          {
+            "id": "western_noir",
+            "name": "Western Noir",
+            "desc": "Western landscapes, weak law, violence, land conflict, and isolation are combined with noir fatalism and moral compromise. The protagonist moves through a harsh world where justice is uncertain and survival leaves stains."
+          }
+        ]
+      },
+      "horror": {
+        "name": "Horror",
+        "desc": "Fiction designed to create fear through the unknown, taboo, bodily threat, psychological collapse, atmosphere, and the loss of safety.",
+        "themes": [
+          {
+            "id": "gothic_horror",
+            "name": "Gothic Horror",
+            "desc": "Old houses, family curses, forbidden rooms, repressed desire, and decaying history create dread. The threat is tied to secrets that refuse to stay buried. Atmosphere and slow revelation matter more than sudden shocks."
+          },
+          {
+            "id": "cosmic_horror",
+            "name": "Cosmic Horror",
+            "desc": "Human reason collapses before entities, scales, and truths that cannot be understood. The terror is not merely a monster, but the discovery that humanity is not central, safe, or significant."
+          },
+          {
+            "id": "haunted_house",
+            "name": "Haunted House",
+            "desc": "A home becomes a machine for exposing grief, trauma, guilt, or old violence. Rooms, noises, objects, and architecture pressure the characters. Fear comes from the reversal of domestic safety."
+          },
+          {
+            "id": "folk_horror",
+            "name": "Folk Horror",
+            "desc": "Remote communities, old rituals, local gods, seasonal customs, and collective silence create unease. Outsiders enter a place with its own rules. Terror comes from discovering that the ritual logic is still alive."
+          },
+          {
+            "id": "body_horror",
+            "name": "Body Horror",
+            "desc": "Mutation, disease, parasites, surgery, technology, or transformation make the body unfamiliar. The fear comes from losing ownership of flesh and identity. Sensory detail and vulnerability are central."
+          },
+          {
+            "id": "quiet_horror",
+            "name": "Quiet Horror",
+            "desc": "Subtle abnormalities accumulate in ordinary life. The danger may be difficult to prove, and ambiguity keeps the reader uneasy. The effect depends on restraint, silence, and a world that is only slightly wrong."
+          },
+          {
+            "id": "slasher_horror",
+            "name": "Slasher Horror",
+            "desc": "A killer stalks a group of victims through a school, camp, suburb, holiday setting, or isolated location. Suspense comes from vulnerability, pursuit, survival order, and the confrontation between the final survivor and the murderer."
+          },
+          {
+            "id": "psychological_horror",
+            "name": "Psychological Horror",
+            "desc": "Fear emerges from paranoia, obsession, grief, guilt, delusion, isolation, or unstable perception. The reader cannot fully trust what the protagonist sees or believes. The horror lies in the collapse of inner safety rather than only external threat."
+          },
+          {
+            "id": "religious_horror",
+            "name": "Religious Horror",
+            "desc": "Possession, exorcism, cults, prophecy, demons, saints, relics, sin, faith, and sacrilege create terror. The conflict is spiritual as well as physical, and fear comes from the possibility that invisible moral or cosmic forces are real."
+          },
+          {
+            "id": "creature_feature",
+            "name": "Creature Feature",
+            "desc": "A monster, animal, mutant, alien organism, or engineered predator threatens a group of characters. The appeal comes from discovery, escalating attacks, survival tactics, and the physical presence of a dangerous nonhuman antagonist."
+          }
+        ]
+      }
+    }
+  },
+  "literary_realist": {
+    "name": "Literary and Realist Fiction",
+    "desc": "International literary traditions focused on style, character complexity, social observation, psychological depth, and thematic resonance.",
+    "genres": {
+      "literary_fiction": {
+        "name": "Literary Fiction",
+        "desc": "Fiction where character, language, consciousness, form, and theme are as important as plot.",
+        "themes": [
+          {
+            "id": "psychological_realism",
+            "name": "Psychological Realism",
+            "desc": "The narrative closely tracks motive, shame, desire, self-deception, and moral conflict. External events may be sparse, but each choice reshapes the inner life. The force comes from exposing human complexity without simplifying it."
+          },
+          {
+            "id": "modernist_stream",
+            "name": "Modernist Stream of Consciousness",
+            "desc": "The story is organized through sensation, memory, association, fragmented time, and inner rhythm rather than conventional plot. The reading experience depends on language, perception, and the movement of consciousness."
+          },
+          {
+            "id": "existential_drift",
+            "name": "Existential Drift",
+            "desc": "Characters face absurdity, isolation, freedom, and the absence of guaranteed meaning. A small event may reveal a whole condition of life. Tension comes from the demand to choose without certainty."
+          },
+          {
+            "id": "metafiction",
+            "name": "Metafiction",
+            "desc": "The text exposes or questions its own fictionality. Author, reader, narrator, character, and book may blur or collide. The pleasure comes from structure, intertextual play, narrative puzzles, and reflection on storytelling itself."
+          },
+          {
+            "id": "minimalist_literary",
+            "name": "Minimalism",
+            "desc": "Plain language, omission, restraint, and precise detail reveal emotional fracture. Major wounds are often left unstated. Meaning emerges through pauses, small actions, repeated objects, and what characters cannot say."
+          },
+          {
+            "id": "magical_realism",
+            "name": "Magical Realism",
+            "desc": "The marvelous appears in a realistic world without needing explanation. Wonder is not escape but a way to express history, family memory, collective trauma, and social truth. The tone treats the impossible as ordinary."
+          },
+          {
+            "id": "autofiction",
+            "name": "Autofiction",
+            "desc": "The novel blurs autobiography and fiction, often using a narrator close to the author while resisting full confession or conventional plot. The interest lies in memory, self-exposure, performance, truth, shame, and the instability of personal narrative."
+          },
+          {
+            "id": "campus_novel",
+            "name": "Campus Novel",
+            "desc": "Universities, departments, students, professors, academic politics, intellectual ambition, class performance, and sexual or ethical scandal create the social field. The tone may be comic, satirical, literary, or dark."
+          },
+          {
+            "id": "kunstlerroman",
+            "name": "Kunstlerroman",
+            "desc": "A subtype of coming-of-age fiction focused specifically on the formation of an artist. The story follows talent, influence, apprenticeship, rejection, vocation, and the cost of turning life into art."
+          }
+        ]
+      },
+      "social_realism": {
+        "name": "Social Realism",
+        "desc": "Fiction concerned with class, race, gender, migration, labor, institutions, and the social pressures shaping private life.",
+        "themes": [
+          {
+            "id": "class_struggle",
+            "name": "Class Mobility",
+            "desc": "Poverty, education, work, respectability, debt, and aspiration shape the protagonist's life. Personal effort meets invisible barriers. The emotional force comes from the gap between individual ambition and structural limitation."
+          },
+          {
+            "id": "immigrant_identity",
+            "name": "Immigrant Identity",
+            "desc": "Language, memory, family expectation, assimilation, prejudice, and belonging drive the story. Characters live between an old home and a new world. The drama comes from mixed identity and generational misunderstanding."
+          },
+          {
+            "id": "racial_history",
+            "name": "Racial History",
+            "desc": "Personal lives are placed inside inherited trauma, collective memory, and suppressed history. The story gives weight to testimony, dignity, erasure, and survival. The present is haunted by what was officially forgotten."
+          },
+          {
+            "id": "feminist_realism",
+            "name": "Feminist Realism",
+            "desc": "Family, work, money, body, desire, and social expectation shape women's choices. The story examines power inside intimacy and public life, not just romance or marriage. Liberation is practical, emotional, and costly."
+          },
+          {
+            "id": "industrial_labor",
+            "name": "Labor and Industry",
+            "desc": "Factories, mines, docks, farms, hospitals, warehouses, or service jobs reveal how work consumes bodies and communities. Conflict comes from capital, unions, layoffs, safety, pride, and the dignity of labor."
+          },
+          {
+            "id": "urban_alienation",
+            "name": "Urban Alienation",
+            "desc": "Modern city life produces loneliness, consumption, unstable housing, shallow contact, and emotional disconnection. The tone is often cool and observant. The effect comes from making familiar urban life feel hollow."
+          }
+        ]
+      },
+      "family_saga": {
+        "name": "Family Saga",
+        "desc": "Fiction that follows generations of marriage, inheritance, migration, secrets, conflict, and continuity across time.",
+        "themes": [
+          {
+            "id": "multigenerational_saga",
+            "name": "Multigenerational Saga",
+            "desc": "Several generations carry the story across decades or a century. Family rise and decline mirror historical change. The appeal comes from repeated patterns, inherited secrets, names, rituals, and the echo of earlier choices."
+          },
+          {
+            "id": "inheritance_secret",
+            "name": "Inheritance Secret",
+            "desc": "A death, will, house, letter, or object exposes an old family lie. Past and present move in parallel until the accepted family story is rewritten. The emotional climax comes from understanding why the previous generation stayed silent."
+          },
+          {
+            "id": "diaspora_family",
+            "name": "Diaspora Family",
+            "desc": "War, migration, politics, or poverty scatters a family across countries and languages. Letters, memories, visits, and reunions hold the structure together. The feeling comes from roots surviving displacement."
+          },
+          {
+            "id": "southern_gothic_family",
+            "name": "Southern Gothic Family",
+            "desc": "Decay, old status, grotesque behavior, guilt, racial memory, and buried violence shape a family landscape. The beauty is worn and unstable. The drama comes from the rot beneath inherited pride."
+          },
+          {
+            "id": "family_reconciliation",
+            "name": "Family Reconciliation",
+            "desc": "Estranged relatives are brought together by illness, a funeral, a holiday, a crisis, or a shared task. Old wounds and misunderstandings surface. Healing comes from acknowledging harm without pretending it never mattered."
+          },
+          {
+            "id": "dynastic_business",
+            "name": "Business Dynasty",
+            "desc": "A family company turns kinship into succession, negotiation, loyalty, and betrayal. The conflict asks who deserves control and what the family name is worth. The pleasure comes from boardroom strategy and private rivalry."
+          }
+        ]
+      },
+      "bildungsroman": {
+        "name": "Bildungsroman",
+        "desc": "Fiction tracing a character's growth from youth or crisis toward self-knowledge, disillusionment, or renewed values.",
+        "themes": [
+          {
+            "id": "coming_of_age",
+            "name": "Coming of Age",
+            "desc": "A young person encounters friendship, first love, family fracture, social rules, hypocrisy, and disappointment. The voice is sensitive and often rebellious. The power comes from seeing the world become complicated for the first time."
+          },
+          {
+            "id": "artist_formation",
+            "name": "Artist Formation",
+            "desc": "A protagonist discovers and claims a creative vocation in writing, painting, music, theater, or another art. Conflict comes from family expectation, poverty, talent anxiety, influence, and the ethics of expression."
+          },
+          {
+            "id": "school_years",
+            "name": "School Years",
+            "desc": "School functions as a small society with hierarchy, friendship, rivalry, bullying, teachers, secrets, and rituals. The plot often follows terms or years. Nostalgia comes from precise details of youth and departure."
+          },
+          {
+            "id": "loss_of_innocence",
+            "name": "Loss of Innocence",
+            "desc": "Death, betrayal, war, violence, or family collapse forces a character to abandon a simpler view of the world. The reader may understand the truth before the character does, creating tenderness and dread."
+          },
+          {
+            "id": "road_growth",
+            "name": "Road Growth",
+            "desc": "Travel, escape, a search, or a long journey creates encounters that reshape the protagonist. Physical movement mirrors inner change. The destination matters, but the real completion is a new understanding of self."
+          },
+          {
+            "id": "late_blooming",
+            "name": "Late Blooming",
+            "desc": "Growth happens in adulthood or middle age after marriage strain, career failure, illness, or bereavement. The story asks whether life can still change. Hope is real, but the cost of change remains visible."
+          }
+        ]
+      },
+      "book_club_fiction": {
+        "name": "Book Club Fiction",
+        "desc": "Accessible literary-commercial fiction designed around emotionally engaging characters, moral choices, family tension, identity, secrets, and discussion-friendly themes. It balances readability with thematic depth and often appeals to adult readers looking for both story momentum and emotional resonance.",
+        "themes": [
+          {
+            "id": "marriage_and_secrets",
+            "name": "Marriage and Secrets",
+            "desc": "A seemingly stable marriage or long partnership is tested by hidden history, betrayal, illness, money, or a moral decision. The story explores intimacy, self-deception, forgiveness, and whether love can survive truth."
+          },
+          {
+            "id": "female_friendship",
+            "name": "Female Friendship",
+            "desc": "Friendship between women carries the emotional structure of the novel. Loyalty, rivalry, envy, care, ambition, motherhood, aging, or shared trauma create the central conflict. The payoff comes from recognition, repair, or painful separation."
+          },
+          {
+            "id": "midlife_reinvention",
+            "name": "Midlife Reinvention",
+            "desc": "An adult protagonist faces divorce, career collapse, bereavement, empty nesting, illness, or burnout and must rebuild a life. The appeal comes from practical hope, emotional honesty, and the question of whether it is ever too late to change."
+          },
+          {
+            "id": "community_crisis",
+            "name": "Community Crisis",
+            "desc": "A neighborhood, town, school, church, workplace, or social circle is disrupted by a death, scandal, accident, disappearance, or public controversy. Multiple private lives intersect, and the story invites discussion about responsibility, belonging, and judgment."
+          }
+        ]
+      },
+      "upmarket_fiction": {
+        "name": "Upmarket Fiction",
+        "desc": "Fiction that combines the readability, hook, and pacing of commercial fiction with the style, character complexity, and thematic ambition of literary fiction. It often centers on a strong premise while offering layered emotional, social, or moral resonance.",
+        "themes": [
+          {
+            "id": "high_concept_literary",
+            "name": "High-Concept Literary",
+            "desc": "A clear, marketable premise drives the story, but the execution emphasizes character, language, moral ambiguity, and emotional consequence. The hook attracts the reader, while the depth comes from what the premise reveals about human life."
+          },
+          {
+            "id": "literary_mystery",
+            "name": "Literary Mystery",
+            "desc": "A disappearance, death, secret, or unresolved event gives the novel shape, but the main focus is psychological, social, or moral rather than purely procedural. The mystery opens a deeper inquiry into memory, guilt, identity, or community."
+          },
+          {
+            "id": "character_driven_family_drama",
+            "name": "Character-Driven Family Drama",
+            "desc": "Family conflict provides the plot engine, but the novel's power comes from interiority, layered relationships, and moral complexity. Secrets matter less as twists than as emotional inheritance."
+          }
+        ]
+      }
+    }
+  },
+  "audience_crossgenre": {
+    "name": "Young Readers and Cross-Genre",
+    "desc": "Fiction defined by audience age, high-concept blending, accessibility, emotional immediacy, or a mix of genre traditions.",
+    "genres": {
+      "young_adult": {
+        "name": "Young Adult",
+        "desc": "Fiction centered on adolescent experience, often blending adventure, romance, school, dystopia, fantasy, and identity formation.",
+        "themes": [
+          {
+            "id": "ya_dystopia",
+            "name": "YA Dystopia",
+            "desc": "A young protagonist is forced into a cruel social system and discovers that the official story is false. Growth and rebellion advance together. The core tension is the sudden burden of public responsibility."
+          },
+          {
+            "id": "ya_fantasy_chosen",
+            "name": "Chosen Teen Adventure",
+            "desc": "An ordinary teenager discovers a special identity, power, lineage, or prophecy and is pulled into a magical conflict. The pleasure comes from awakening ability, testing friendship, and learning to make consequential choices."
+          },
+          {
+            "id": "ya_contemporary_issue",
+            "name": "Contemporary YA Issues",
+            "desc": "School pressure, mental health, family conflict, identity, grief, friendship, and first love are treated with direct emotional seriousness. The stakes are daily life, but the pain is never dismissed as small."
+          },
+          {
+            "id": "boarding_school_secret",
+            "name": "Boarding School Secret",
+            "desc": "A closed school environment hides class tension, friendship, rivalry, forbidden spaces, and dangerous secrets. Terms, dorms, clubs, and nighttime exploration provide structure. The appeal is belonging mixed with threat."
+          },
+          {
+            "id": "summer_romance",
+            "name": "Summer Romance",
+            "desc": "A seaside town, camp, holiday, or temporary job creates a brief and intense relationship. The countdown to departure sharpens every feeling. The mood is bright, bittersweet, and shaped by the impossibility of preserving youth."
+          },
+          {
+            "id": "friend_group_growth",
+            "name": "Friend Group Growth",
+            "desc": "A group of teenagers faces a contest, secret, adventure, graduation, or shared crisis. Each member has a flaw and a growth beat. The climax comes when the group reforms after misunderstanding or betrayal."
+          }
+        ]
+      },
+      "children_middle_grade": {
+        "name": "Children's and Middle Grade",
+        "desc": "Fiction for children and middle-grade readers, emphasizing clear adventure, warmth, humor, moral growth, and wonder within safe boundaries.",
+        "themes": [
+          {
+            "id": "portal_adventure",
+            "name": "Portal Adventure",
+            "desc": "A child enters another world through a wardrobe, map, book, door, dream, or secret passage. Real-life worries are transformed into fantasy trials. The core values are courage, trust, wonder, and the meaning of home."
+          },
+          {
+            "id": "animal_friendship",
+            "name": "Animal Friendship",
+            "desc": "A bond between a child and an animal, or among talking animals, carries the emotional arc. The story teaches responsibility, care, loyalty, and sometimes loss, while keeping the language warm and clear."
+          },
+          {
+            "id": "school_mischief",
+            "name": "School Mischief",
+            "desc": "Classrooms, teachers, classmates, rules, and pranks create a comic structure. Humor comes from the child's view of adult systems and from harmless rebellion. The ending keeps a gentle sense of learning."
+          },
+          {
+            "id": "fairy_tale_retelling",
+            "name": "Fairy-Tale Retelling",
+            "desc": "Classic fairy-tale roles, plots, or endings are rewritten with new motives and modern values. The story keeps clarity and wonder while reversing expectations about princesses, witches, monsters, and quests."
+          },
+          {
+            "id": "gentle_mystery",
+            "name": "Gentle Mystery",
+            "desc": "Young detectives solve a school, neighborhood, family, or holiday mystery. Danger remains controlled, clues are fair, and curiosity is rewarded. The child reader should be able to reason along with the case."
+          },
+          {
+            "id": "bedtime_wonder",
+            "name": "Bedtime Wonder",
+            "desc": "Short, soft, dreamlike stories built around moons, toys, forests, clouds, stars, or small wishes. Conflict is light and the ending is secure. The aim is comfort, imagination, and emotional safety."
+          }
+        ]
+      },
+      "speculative_literary": {
+        "name": "Speculative Literary Fiction",
+        "desc": "Fiction that blends science fiction, fantasy, allegory, and literary methods to examine reality, ethics, and philosophy through non-realistic premises.",
+        "themes": [
+          {
+            "id": "alternate_history",
+            "name": "Alternate History",
+            "desc": "One historical turning point is changed and a new world is logically developed from it. The interest lies in contingency, ideology, institutions, and ordinary life under a familiar but altered order."
+          },
+          {
+            "id": "climate_fiction",
+            "name": "Climate Fiction",
+            "desc": "Climate crisis, ecological collapse, migration, water, food, energy, and adaptation reshape family, politics, cities, and memory. The urgency comes from a future that already feels present."
+          },
+          {
+            "id": "philosophical_sf",
+            "name": "Philosophical Science Fiction",
+            "desc": "A speculative premise examines consciousness, free will, death, identity, language, ethics, or personhood. The plot may be quiet, but the conceptual turn should change how the reader thinks."
+          },
+          {
+            "id": "fabulist_social",
+            "name": "Social Fabulism",
+            "desc": "An absurd, fairy-tale, or impossible premise reveals a real social structure. The rules may be strange, but they are internally consistent. Satire comes from how closely the invention resembles reality."
+          },
+          {
+            "id": "near_future_domestic",
+            "name": "Near-Future Domestic",
+            "desc": "Technology, medicine, reproduction, data, algorithms, or automation enter ordinary family life. The speculative element serves marriage, parenting, aging, care, and ethical choice rather than spectacle."
+          },
+          {
+            "id": "post_apocalyptic_literary",
+            "name": "Literary Post-Apocalyptic",
+            "desc": "A world after catastrophe is used to explore memory, art, community, grief, and fragile civilization. Survival matters, but so do music, stories, tenderness, and the traces of what was lost."
+          },
+          {
+            "id": "romantasy",
+            "name": "Romantasy",
+            "desc": "A fantasy story in which the central romantic relationship is as important as the magical conflict, court politics, war, prophecy, or adventure. The pleasure comes from emotional tension, forbidden desire, power imbalance, magical stakes, and the fusion of romantic payoff with fantasy-world consequences."
+          },
+          {
+            "id": "climate_thriller",
+            "name": "Climate Thriller",
+            "desc": "Climate crisis creates immediate suspense through flood, fire, drought, migration, sabotage, corporate secrecy, resource conflict, or ecological tipping points. The plot combines environmental stakes with thriller pacing."
+          }
+        ]
+      },
+      "satire_humor": {
+        "name": "Satire and Humor",
+        "desc": "Fiction that uses comedy, irony, exaggeration, absurdity, parody, and wit to expose social contradiction or human weakness.",
+        "themes": [
+          {
+            "id": "social_satire",
+            "name": "Social Satire",
+            "desc": "Exaggerated characters and absurd institutions expose hypocrisy, vanity, greed, ideology, or class performance. The reader laughs first, then recognizes the real target behind the joke."
+          },
+          {
+            "id": "workplace_comedy",
+            "name": "Workplace Comedy",
+            "desc": "Offices, corporate politics, meetings, metrics, projects, managers, and professional jargon create a comic arena. Humor comes from serious language used to justify absurd goals."
+          },
+          {
+            "id": "absurdist_comedy",
+            "name": "Absurdist Comedy",
+            "desc": "Events violate ordinary logic while remaining consistent inside their own system. Characters respond seriously to impossible situations. Comedy and anxiety coexist, especially when systems become incomprehensible."
+          },
+          {
+            "id": "comic_travelogue",
+            "name": "Comic Travelogue",
+            "desc": "Travel mishaps, cultural misunderstandings, language errors, strange companions, and unexpected places form an episodic comic structure. The voice often relies on self-mockery and sharp observation."
+          },
+          {
+            "id": "genre_parody",
+            "name": "Genre Parody",
+            "desc": "Detective, fantasy, science fiction, romance, horror, or adventure conventions are imitated and inverted. The comedy works best when it understands the original genre deeply rather than mocking it randomly."
+          },
+          {
+            "id": "dark_humor",
+            "name": "Dark Humor",
+            "desc": "Death, war, illness, failure, bureaucracy, or despair are treated with bitter wit. The laughter has an aftertaste. The effect comes from a serious world operating through ridiculous rules."
+          }
+        ]
+      },
+      "new_adult": {
+        "name": "New Adult",
+        "desc": "Fiction centered on characters roughly in the college-to-mid-twenties stage, dealing with independence, sex, first serious relationships, career beginnings, identity, trauma, money, and separation from family. It often overlaps with contemporary romance and coming-of-age fiction.",
+        "themes": [
+          {
+            "id": "college_romance",
+            "name": "College Romance",
+            "desc": "A romance set in college or early adulthood, shaped by dorm life, classes, parties, sports, ambition, friendship groups, and first independence. Emotional intensity comes from discovering adult desire while still forming identity."
+          }
+        ]
+      }
+    }
+  }
+}

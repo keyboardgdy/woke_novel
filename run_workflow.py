@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import cli as cli_module
+from i18n import t
 from ui import (
     C, I,
     blank, confirm, dim, error, info, init, line, note, press_enter,
@@ -20,7 +22,7 @@ from ui import (
 from cli import (
     ask_genre, ask_novel_size, ask_project_name, ask_user_description, size_to_word_count,
 )
-from workflow_runner import STEP_NAMES, WorkflowRunner
+from workflow_runner import STEP_NAMES, WorkflowRunner, step_name
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +30,13 @@ from workflow_runner import STEP_NAMES, WorkflowRunner
 # ---------------------------------------------------------------------------
 def _print_usage() -> None:
     init()
-    print_banner("woke_novel", subtitle="用法 & 可用命令")
+    print_banner("woke_novel", subtitle=t("usage.subtitle"))
     print_kv([
-        ("single <step>",         "运行单个步骤"),
-        ("session <block> <…>",   "在新会话中运行多个步骤"),
-        ("init",                  "初始化项目（询问题材和项目名）"),
-        ("loop",                  "完整循环流程（自动初始化）"),
-        ("continue",              "从上次中断的步骤继续执行"),
+        ("single <step>",         t("usage.single")),
+        ("session <block> <...>", t("usage.session")),
+        ("init",                  t("usage.init")),
+        ("loop",                  t("usage.loop")),
+        ("continue",              t("usage.continue")),
     ], key_color=C.ACCENT, value_color=C.MUTED)
 
 
@@ -106,7 +108,7 @@ def _infer_next_05b_act(runner) -> int | None:
         return None
     baseline_dir = runner.path_resolver.baseline_dir
     for act_num in range(1, act_count + 1):
-        if not (Path(baseline_dir) / f"核心骨架_{act_num}.md").exists():
+        if not (Path(baseline_dir) / runner.skeleton_file_name(act_num)).exists():
             return act_num
     return act_count + 1
 
@@ -196,7 +198,7 @@ class WorkflowExecutor:
 
     def require_started(self) -> None:
         if not self.started and not self.completed:
-            error(f"无法定位断点游标：{self.cursor}")
+            error(t("workflow.cursor_not_found", cursor=self.cursor))
             sys.exit(1)
 
     def run_step(self, step: str, display_id: str, option_index: int = None,
@@ -233,14 +235,14 @@ def _finalize_creative_selection(runner, chosen: int, novel_name: str = None) ->
     if novel_name is None:
         novel_name = runner.extract_novel_name_from_creative(chosen)
     if novel_name:
-        success(f"提取到小说名：{novel_name}")
+        success(t("workflow.extracted_novel_name", name=novel_name))
         runner.rename_project(novel_name)
 
     runner.option_index = chosen
 
     ref_works = runner.extract_ref_works_from_creative(chosen)
     if ref_works:
-        note(f"参考作品：{ref_works}")
+        note(t("workflow.ref_works", works=ref_works))
         runner.ref_works = ref_works
 
     runner.project_info.select_option(
@@ -261,18 +263,18 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
     creative_display_id = runner.make_display_id("creative_option")
     act_display_id = runner.make_display_id("arc")
 
-    print_section("会话 1 · 创意方案生成", color=C.PRIMARY)
+    print_section(t("workflow.session_creative"), color=C.PRIMARY)
     for option_index in range(1, option_count + 1):
         if option_index > 1 and executor.started:
             line(color=C.DIM)
         if executor.started or executor._matches(_step_cursor("01", option_index=option_index)):
-            note(f"生成方案 {option_index}/{option_count}")
+            note(t("workflow.generate_option", index=option_index, total=option_count))
         _run_or_exit(
             executor.run_step(
                 "01", creative_display_id,
                 option_index=option_index, user_description=user_description,
             ),
-            "创意方案生成失败",
+            t("workflow.creative_generation_failed"),
         )
 
     chosen = runner.project_info.selected_option
@@ -280,55 +282,55 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
     def choose_creative() -> bool:
         nonlocal chosen
         chosen = select_creative(runner, option_count)
-        success(f"已选择方案 {chosen}")
+        success(t("workflow.creative_selected", index=chosen))
         runner.option_index = chosen
         return True
 
-    _run_or_exit(executor.run_unit(WorkflowCursor("choose_creative"), choose_creative), "创意方案选择失败")
+    _run_or_exit(executor.run_unit(WorkflowCursor("choose_creative"), choose_creative), t("workflow.creative_selection_failed"))
     chosen = chosen or runner.project_info.selected_option or 1
 
     _run_or_exit(
         executor.run_step("02", creative_display_id, option_index=chosen),
-        "创意方案补充失败",
+        t("workflow.creative_supplement_failed"),
     )
     _run_or_exit(
         executor.run_unit(WorkflowCursor("finalize_creative"), lambda: (_finalize_creative_selection(runner, chosen) or True)),
-        "创意方案信息提取失败",
+        t("workflow.creative_finalize_failed"),
     )
 
-    print_section("会话 2 · 世界观与设定", color=C.PRIMARY)
+    print_section(t("workflow.session_world"), color=C.PRIMARY)
     for step in ["03", "04"]:
-        _run_or_exit(executor.run_step(step, runner.make_display_id("world")), f"步骤 {step} 失败")
+        _run_or_exit(executor.run_step(step, runner.make_display_id("world")), t("workflow.step_failed", step=step))
 
-    print_section("会话 3 · 故事主轴", color=C.PRIMARY)
+    print_section(t("workflow.session_axis"), color=C.PRIMARY)
     for step in ["05", "05a"]:
-        _run_or_exit(executor.run_step(step, act_display_id), f"步骤 {step} 失败")
+        _run_or_exit(executor.run_step(step, act_display_id), t("workflow.step_failed", step=step))
 
     def extract_act_count() -> bool:
         act_count = runner.extract_act_count_from_macro_model()
         if not act_count:
-            warn("无法获取幕次总数，跳过 05b 循环")
+            warn(t("workflow.no_act_count"))
             return True
         runner.project_info.update(act_count=act_count)
-        success(f"提取幕次总数：{act_count}")
+        success(t("workflow.extracted_act_count", count=act_count))
         return True
 
-    _run_or_exit(executor.run_unit(WorkflowCursor("extract_act_count"), extract_act_count), "幕次总数提取失败")
+    _run_or_exit(executor.run_unit(WorkflowCursor("extract_act_count"), extract_act_count), t("workflow.extract_act_failed"))
 
     act_count = runner.project_info.act_count or 0
     if act_count:
-        print_section(f"步骤 05b 循环 · 幕次核心骨架（共 {act_count} 幕）", color=C.PRIMARY)
+        print_section(t("workflow.step_05b_loop", count=act_count), color=C.PRIMARY)
     for act_num in range(1, act_count + 1):
         if act_num > 1 and executor.started:
             line(color=C.DIM)
         if executor.started or executor._matches(_step_cursor("05b", act_num=act_num)):
-            note(f"幕次 {act_num}/{act_count}")
+            note(t("workflow.act_progress", act=act_num, total=act_count))
         _run_or_exit(
             executor.run_step(
                 "05b", act_display_id,
                 user_description=f"幕次{act_num}", act_num=act_num,
             ),
-            f"步骤 05b (幕次{act_num}) 失败",
+            t("workflow.step_05b_failed", act=act_num),
         )
 
     def extract_chapter_counts() -> bool:
@@ -337,33 +339,33 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             return True
         chapter_counts = runner.extract_all_chapter_counts(act_count_inner)
         total_chapters = sum(chapter_counts)
-        success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
+        success(t("workflow.chapter_counts", counts=chapter_counts, total=total_chapters))
         runner.project_info.update(chapter_counts=chapter_counts, total_chapters=total_chapters)
         return True
 
     _run_or_exit(
         executor.run_unit(WorkflowCursor("extract_chapter_counts"), extract_chapter_counts),
-        "章节数提取失败",
+        t("workflow.extract_chapters_failed"),
     )
 
-    print_section("步骤 18 · post_05b 生成项目级 CLAUDE.md", color=C.ACCENT)
+    print_section(t("workflow.step_18_post_05b"), color=C.ACCENT)
     if not executor.run_step("18", act_display_id, phase="post_05b"):
-        warn("步骤 18 post_05b 失败，不影响后续流程")
+        warn(t("workflow.step_18_post_05b_failed"))
 
-    print_section("会话 4 · 开篇创作", color=C.PRIMARY)
+    print_section(t("workflow.session_opening"), color=C.PRIMARY)
     choice = _confirm_open_session()
     if choice == "n":
-        info("已暂停。重新运行可使用 'continue' 命令从断点继续。")
+        info(t("workflow.paused"))
         sys.exit(0)
     if choice == "q":
-        info("用户主动退出。")
+        info(t("workflow.user_quit"))
         sys.exit(0)
 
     opening_display_id = runner.make_display_id("opening")
     for step in OPENING_STEPS:
         _run_or_exit(
             executor.run_step(step, opening_display_id, act_num=1, round_num=1),
-            f"步骤 {step} 失败",
+            t("workflow.step_failed", step=step),
         )
 
     _run_or_exit(
@@ -371,32 +373,32 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             WorkflowCursor("create_story_summary", round_num=1),
             lambda: runner.extract_and_create_story_summary(1),
         ),
-        "开篇故事梗概提取失败",
+        t("workflow.opening_summary_failed"),
     )
 
     chapter_counts = runner.project_info.chapter_counts or []
     total_chapters = runner.project_info.total_chapters or sum(chapter_counts)
-    success(f"各幕章节数：{chapter_counts}，总章节数：{total_chapters}")
+    success(t("workflow.chapter_counts", counts=chapter_counts, total=total_chapters))
 
     for act_num in range(1, len(chapter_counts) + 1):
         loop_count = _loop_count_for_act(act_num, chapter_counts)
         if loop_count <= 0:
-            warn(f"第 {act_num} 幕可用轮次为 0，跳过")
+            warn(t("workflow.act_zero_rounds", act=act_num))
             continue
 
-        print_section(f"第 {act_num} 幕创作循环（共 {loop_count} 轮）", color=C.PRIMARY)
+        print_section(t("workflow.act_loop", act=act_num, count=loop_count), color=C.PRIMARY)
         first_round = _first_round_for_act(act_num, chapter_counts)
         for loop_idx in range(loop_count):
             round_num = first_round + loop_idx
             print_section(
-                f"第 {act_num} 幕 · 轮次 {loop_idx + 1}/{loop_count}（R{round_num}）",
+                t("workflow.round_section", act=act_num, index=loop_idx + 1, total=loop_count, round=round_num),
                 color=C.ACCENT,
             )
             session_name = runner.make_display_id(f"round_{round_num}")
             for step in ROUND_STEPS:
                 _run_or_exit(
                     executor.run_step(step, session_name, act_num=act_num, round_num=round_num),
-                    f"步骤 {step} 失败",
+                    t("workflow.step_failed", step=step),
                 )
 
             _run_or_exit(
@@ -404,12 +406,12 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
                     WorkflowCursor("append_story_summary", act_num=act_num, round_num=round_num),
                     lambda round_num=round_num: runner.append_story_summary(round_num),
                 ),
-                "追加故事梗概失败",
+                t("workflow.append_summary_failed"),
             )
 
             _run_or_exit(
                 executor.run_step("16", session_name, act_num=act_num, round_num=round_num),
-                "步骤 16 失败",
+                t("workflow.step_16_failed"),
             )
 
             def sync_round(round_num=round_num) -> bool:
@@ -423,29 +425,29 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
                     WorkflowCursor("sync_summary", act_num=act_num, round_num=round_num),
                     sync_round,
                 ),
-                "同步故事梗概失败",
+                t("workflow.sync_summary_failed"),
             )
-            note("继续下一轮…")
+            note(t("workflow.next_round"))
 
-        print_section(f"步骤 17 · 第 {act_num} 幕故事梗概精简", color=C.PRIMARY)
+        print_section(t("workflow.step_17", act=act_num), color=C.PRIMARY)
         _run_or_exit(
             executor.run_step("17", runner.make_display_id(f"act_{act_num}"), act_num=act_num),
-            "步骤 17 失败",
+            t("workflow.step_17_failed"),
         )
         runner.sync_summary_to_state(_first_round_for_act(act_num, chapter_counts) + loop_count - 1)
 
         print_section(
-            f"步骤 18 · post_17 刷新项目根 CLAUDE.md（第 {act_num} 幕后）",
+            t("workflow.step_18_post_17", act=act_num),
             color=C.ACCENT,
         )
         if not executor.run_step(
             "18", runner.make_display_id(f"act_{act_num}"),
             phase="post_17", act_num=act_num,
         ):
-            warn("步骤 18 post_17 失败，不影响后续流程")
+            warn(t("workflow.step_18_post_17_failed"))
 
     if cursor and cursor.kind == "done" and executor.finish_if_target_done(WorkflowCursor("done")):
-        success("工作流此前已完成，无需继续执行。")
+        success(t("workflow.already_done"))
     executor.require_started()
 
 
@@ -459,7 +461,7 @@ def _confirm_open_session() -> str:
     直接放行并打印一行提示，调用方后续的 n / q 分支成为死代码（保留无害）。
     如需恢复交互式确认，把函数体换回原 `prompt(...)` 循环即可。
     """
-    info("自动继续【开篇创作】会话（默认 y，不停顿）。")
+    info(t("workflow.auto_continue_opening"))
     return "y"
 
 
@@ -477,25 +479,29 @@ def main() -> None:
     if command == "single":
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("step", help="步骤编号，如 01")
+        parser.add_argument("step", help=t("argparse.step_help"))
         parser.add_argument("-g", "--genre", default="都市")
         parser.add_argument("-p", "--project-name", default="test_project")
-        parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
         parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
-                            help="CLI 后端（默认 claude）")
+                            help=t("argparse.provider_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
         parser.add_argument("--max-retries", type=int, default=3,
-                            help="失败自动重试次数（不含首次，默认 3）")
+                            help=t("argparse.retry_help"))
         args = parser.parse_args(sys.argv[2:])
 
+        cli_module.set_language(args.language)
         runner = WorkflowRunner(args.project_name, args.genre, dry_run=args.dry,
-                                max_retries=args.max_retries, provider=args.provider)
+                                max_retries=args.max_retries, provider=args.provider,
+                                language=args.language)
         display_id = runner.make_display_id(args.step)
         ok = runner.run_step(args.step, display_id)
         sys.exit(0 if ok else 1)
 
     elif command == "session":
         if len(sys.argv) < 4:
-            error("用法: python run_workflow.py session <block> <step1,step2,...> [选项]")
+            error(t("argparse.session_usage"))
             sys.exit(1)
 
         block_name = sys.argv[2]
@@ -508,57 +514,68 @@ def main() -> None:
         parser.add_argument("-p", "--project-name", default="test_project")
         parser.add_argument("--dry", action="store_true")
         parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
-                            help="CLI 后端（默认 claude）")
+                            help=t("argparse.provider_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
         parser.add_argument("--max-retries", type=int, default=3,
-                            help="失败自动重试次数（不含首次，默认 3）")
+                            help=t("argparse.retry_help"))
         args, unknown = parser.parse_known_args(sys.argv[4:])
 
+        cli_module.set_language(args.language)
         runner = WorkflowRunner(args.project_name, args.genre, dry_run=args.dry,
-                                max_retries=args.max_retries, provider=args.provider)
+                                max_retries=args.max_retries, provider=args.provider,
+                                language=args.language)
         ok = runner.run_session_block(block_name, steps)
         sys.exit(0 if ok else 1)
 
     elif command == "init":
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("--genre", default=None, help="小说题材（省略则交互询问）")
+        parser.add_argument("--genre", default=None, help=t("argparse.genre_help"))
         parser.add_argument("--novel-size", default=None,
-                            help="小说规模（短篇/中篇/长篇/超长篇，省略则交互询问）")
+                            help=t("argparse.novel_size_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
         args = parser.parse_args(sys.argv[2:])
 
+        cli_module.set_language(args.language)
         genre = args.genre or ask_genre()
         project_name = ask_project_name()
         novel_size = args.novel_size or ask_novel_size()
         target_word_count = size_to_word_count(novel_size)
 
         runner = WorkflowRunner(project_name, genre,
-                                novel_size=novel_size, target_word_count=target_word_count)
-        print_panel("项目初始化完成", "", color=C.SUCCESS, icon=I.OK)
+                                novel_size=novel_size, target_word_count=target_word_count,
+                                language=args.language)
+        print_panel(t("workflow.init_done"), "", color=C.SUCCESS, icon=I.OK)
         print_kv([
-            ("项目",   runner.project_name),
-            ("题材",   runner.genre),
-            ("规模",   f"{novel_size}（约 {target_word_count // 10_000} 万字）"),
-            ("项目目录", str(runner.path_resolver.project_root)),
+            (t("workflow.init_project"), runner.project_name),
+            (t("workflow.init_genre"), runner.genre),
+            (t("workflow.init_size"), t("full.config_size", size=novel_size, words=target_word_count // 10_000).split(None, 1)[-1]),
+            (t("workflow.init_project_dir"), str(runner.path_resolver.project_root)),
         ])
         sys.exit(0)
 
     elif command == "loop":
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
         parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
-                            help="CLI 后端（默认 claude）")
-        parser.add_argument("--option-count", type=int, default=3, help="创意方案生成数量")
-        parser.add_argument("--genre", default=None, help="小说题材（省略则交互询问）")
-        parser.add_argument("--project-name", default=None, help="项目名（省略则交互询问）")
+                            help=t("argparse.provider_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
+        parser.add_argument("--option-count", type=int, default=3, help=t("argparse.option_count_help"))
+        parser.add_argument("--genre", default=None, help=t("argparse.genre_help"))
+        parser.add_argument("--project-name", default=None, help=t("argparse.project_name_help"))
         parser.add_argument("--max-retries", type=int, default=3,
-                            help="失败自动重试次数（不含首次，默认 3）")
+                            help=t("argparse.retry_help"))
         parser.add_argument("--user-description", default=None,
-                            help="补充说明（省略则交互询问，默认值取自 ask_genre 选中的小类 desc）")
+                            help=t("argparse.user_description_help"))
         parser.add_argument("--novel-size", default=None,
-                            help="小说规模（短篇/中篇/长篇/超长篇，省略则交互询问）")
+                            help=t("argparse.novel_size_help"))
         args = parser.parse_args(sys.argv[2:])
 
+        cli_module.set_language(args.language)
         genre = args.genre or ask_genre()
         project_name = args.project_name or ask_project_name()
         user_description = args.user_description or ask_user_description()
@@ -568,12 +585,13 @@ def main() -> None:
         runner = WorkflowRunner(project_name, genre, dry_run=args.dry,
                                 max_retries=args.max_retries,
                                 novel_size=novel_size, target_word_count=target_word_count,
-                                provider=args.provider)
+                                provider=args.provider, language=args.language)
 
         print_banner(
-            f"项目：{runner.project_name}",
-            subtitle=f"题材 {runner.genre} · 规模 {novel_size}（约 {target_word_count // 10_000} 万字）"
-                     f" · 后端 {runner.provider} · 目录 {runner.path_resolver.project_root}",
+            t("workflow.banner_project", project=runner.project_name),
+            subtitle=t("workflow.banner_subtitle", genre=runner.genre, size=novel_size,
+                       words=target_word_count // 10_000, provider=runner.provider,
+                       path=runner.path_resolver.project_root),
         )
 
         run_workflow_from_cursor(
@@ -584,35 +602,40 @@ def main() -> None:
 
         print_done(
             project=runner.project_name,
-            extra=f"创作轮次 {runner.round - 1}",
+            extra=t("workflow.done_extra", round=runner.round - 1),
         )
 
     elif command == "continue":
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("--dry", action="store_true", help="干运行")
+        parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
         parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
-                            help="CLI 后端（默认 claude）")
-        parser.add_argument("--project-name", default=None, help="项目名（省略则交互询问）")
+                            help=t("argparse.provider_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
+        parser.add_argument("--project-name", default=None, help=t("argparse.project_name_help"))
         parser.add_argument("--max-retries", type=int, default=3,
-                            help="失败自动重试次数（不含首次，默认 3）")
+                            help=t("argparse.retry_help"))
         args = parser.parse_args(sys.argv[2:])
 
+        cli_module.set_language(args.language)
         project_name = args.project_name or ask_project_name()
         runner = WorkflowRunner(project_name, dry_run=args.dry,
-                                max_retries=args.max_retries, provider=args.provider)
+                                max_retries=args.max_retries, provider=args.provider,
+                                language=args.language)
 
         last_step = runner.project_info.last_step
         current_round = runner.project_info.current_round
         last_phase = runner.project_info.last_step_phase
 
         print_banner(
-            f"继续执行：{runner.project_name}",
-            subtitle=f"当前轮次 R{current_round} · 后端 {runner.provider} · 上次中断 步骤 {last_step or '无'}",
+            t("workflow.continue_title", project=runner.project_name),
+            subtitle=t("workflow.continue_subtitle", round=current_round, provider=runner.provider,
+                       step=last_step or t("common.none")),
         )
 
         if last_step is None:
-            error("没有找到中断点，请使用 'loop' 命令从头开始")
+            error(t("workflow.no_checkpoint"))
             sys.exit(1)
 
         if runner.project_info.selected_option:
@@ -623,35 +646,35 @@ def main() -> None:
         option_count = runner.project_info.get("option_count", 3)
         cursor = compute_resume_cursor(runner, option_count=option_count)
         if cursor is None:
-            error(f"无法识别的断点 last_step={last_step!r} last_phase={last_phase!r}")
+            error(t("workflow.unknown_cursor", last_step=last_step, last_phase=last_phase))
             sys.exit(1)
 
         if cursor.kind == "done":
-            note("断点定位：工作流已完成")
+            note(t("workflow.cursor_done"))
         elif cursor.kind == "step":
-            detail = f"步骤 {cursor.step}"
+            detail = t("workflow.cursor_step", step=cursor.step)
             if cursor.act_num:
-                detail += f" · 第 {cursor.act_num} 幕"
+                detail += t("workflow.cursor_act", act=cursor.act_num)
             if cursor.round_num:
                 detail += f" · R{cursor.round_num}"
             if cursor.phase:
                 detail += f" · {cursor.phase}"
-            note(f"断点定位：将从 {detail} 继续")
+            note(t("workflow.cursor_resume", detail=detail))
         else:
-            note(f"断点定位：将从 {cursor.kind} 继续")
-        if not args.dry and not confirm("确认继续?", default=True):
-            warn("已取消")
+            note(t("workflow.cursor_kind_resume", kind=cursor.kind))
+        if not args.dry and not confirm(t("common.confirm_continue"), default=True):
+            warn(t("common.cancelled"))
             sys.exit(0)
 
         run_workflow_from_cursor(runner, cursor=cursor, option_count=option_count)
 
         print_done(
             project=runner.project_name,
-            extra=f"创作轮次 R{runner.round - 1}",
+            extra=t("workflow.done_extra", round=f"R{runner.round - 1}"),
         )
 
     else:
-        error(f"未知命令：{command}")
+        error(t("workflow.unknown_command", command=command))
         sys.exit(1)
 
 
@@ -660,8 +683,10 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 # 标题格式：`# 创意方案：<name>`，冒号兼容全/半角
 _CREATIVE_TITLE_RE = re.compile(r"^#\s*创意方案[：:]\s*(.+?)\s*$", re.MULTILINE)
+_CREATIVE_TITLE_RE_EN = re.compile(r"^#\s*Creative\s+Proposal[：:]\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 # 开篇段定位：`## 开篇设想` 段头
 _CREATIVE_OPENING_HEAD = re.compile(r"##\s*开篇设想\s*\n")
+_CREATIVE_OPENING_HEAD_EN = re.compile(r"##\s*Opening\s+Concept\s*\n", re.IGNORECASE)
 # 段尾边界：下一个二级标题（不撞空段，整段保留）
 _CREATIVE_OPENING_END = re.compile(r"\n##\s")
 
@@ -673,10 +698,10 @@ def _extract_creative_meta(text: str) -> tuple[str, str]:
     空段截断），完整呈现整段开篇设想；段落内的换行交给 rich Panel 在
     宽度内自动折行。任一字段抽不到时返回空串，由 UI 层兜底为占位文字。
     """
-    title_match = _CREATIVE_TITLE_RE.search(text)
+    title_match = _CREATIVE_TITLE_RE.search(text) or _CREATIVE_TITLE_RE_EN.search(text)
     title = title_match.group(1).strip() if title_match else ""
 
-    head_match = _CREATIVE_OPENING_HEAD.search(text)
+    head_match = _CREATIVE_OPENING_HEAD.search(text) or _CREATIVE_OPENING_HEAD_EN.search(text)
     if not head_match:
         return title, ""
     after = text[head_match.end():]
@@ -708,12 +733,13 @@ def select_creative(runner, n: int) -> int:
     baseline_dir = runner.path_resolver.baseline_dir
     items = []
     for i in range(1, n + 1):
-        path = Path(baseline_dir) / f"创意方案_{i}.md"
+        name = f"Creative_Proposal_{i}.md" if runner.language == "en" else f"创意方案_{i}.md"
+        path = Path(baseline_dir) / name
         title, opening = _read_creative_card(path)
         items.append((i, title, opening))
     print_creative_cards(items)
-    options = [f"方案 {i+1}" for i in range(n)]
-    return select("选择一个创意方案", options, default=0) + 1
+    options = [t("single.creative_option", index=i + 1) for i in range(n)]
+    return select(t("single.choose_creative"), options, default=0) + 1
 
 
 if __name__ == "__main__":

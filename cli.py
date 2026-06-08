@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import i18n as i18n_module
+from i18n import t
 from ui import (
     C, I,
     blank, chip, clear, confirm, dim, info, init, line,
@@ -18,10 +20,27 @@ from ui import (
 
 
 PRESETS_PATH = Path(__file__).parent / "assets" / "style_presets_classified.json"
+PRESETS_PATH_EN = Path(__file__).parent / "assets" / "style_presets_classified_en.json"
+_current_language = "zh"
 
 # ask_genre 选完小类后写入这里，ask_user_description 读取作为默认值。
 # 一次 init / loop 流程只跑一次题材选择，所以模块级缓存够用。
 _last_theme_desc: Optional[str] = None
+
+
+def set_language(language: str) -> None:
+    """设置交互层使用的语言资源。"""
+    global _current_language
+    _current_language = "en" if (language or "zh").strip().lower() == "en" else "zh"
+    i18n_module.set_language(_current_language)
+
+
+def get_language() -> str:
+    return _current_language
+
+
+def _presets_path() -> Path:
+    return PRESETS_PATH_EN if _current_language == "en" else PRESETS_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -39,12 +58,13 @@ _SIZE_LABEL_TO_WORDS = {label: words for label, words in NOVEL_SIZES}
 
 
 def _load_presets() -> dict:
-    if not PRESETS_PATH.exists():
+    presets_path = _presets_path()
+    if not presets_path.exists():
         return {}
     try:
-        return json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
+        return json.loads(presets_path.read_text(encoding="utf-8"))
     except Exception as e:
-        warn(f"读取题材预设失败: {e}")
+        warn(t("genre.presets_failed", error=e))
         return {}
 
 
@@ -75,10 +95,10 @@ def ask_genre() -> str:
     channel_keys: List[str] = list(presets.keys())
 
     init()
-    print_subheader("项目类型选择", color=C.PRIMARY)
+    print_subheader(t("genre.title"), color=C.PRIMARY)
     if not channel_keys:
-        warn("题材预设加载失败，回退为自由输入。")
-        genre = prompt("小说题材", default="都市")
+        warn(t("genre.presets_fallback"))
+        genre = prompt(t("genre.prompt"), default="都市")
         _last_theme_desc = None
         return genre
 
@@ -87,14 +107,14 @@ def ask_genre() -> str:
         (i + 1, presets[k].get("name", k), presets[k].get("desc", ""))
         for i, k in enumerate(channel_keys)
     ]
-    print_choices_table(ch_items, title="请选择创作频道", allow_custom=False)
+    print_choices_table(ch_items, title=t("genre.channel_title"), allow_custom=False)
     ch_raw = prompt(
-        f"请选择",
+        t("common.choose"),
         default="1",
     ).strip()
 
     if not ch_raw.isdigit() or not (1 <= int(ch_raw) <= len(channel_keys)):
-        warn(f"无效编号 {ch_raw}，将按自定义题材处理。")
+        warn(t("genre.invalid_custom", value=ch_raw))
         _last_theme_desc = None
         return ch_raw
 
@@ -113,11 +133,11 @@ def ask_genre() -> str:
         (i + 1, genres[k].get("name", k), genres[k].get("desc", ""))
         for i, k in enumerate(genre_keys)
     ]
-    print_subheader(f"━━━ {ch_name}类型 ━━━", color=C.ACCENT)
-    print_choices_table(g_items, title="请选择小说类型", allow_custom=True, custom_label="自定义类型")
+    print_subheader(t("genre.type_subtitle", name=ch_name), color=C.ACCENT)
+    print_choices_table(g_items, title=t("genre.type_title"), allow_custom=True, custom_label=t("genre.custom_type"))
 
     g_raw = prompt(
-        f"请选择",
+        t("common.choose"),
         default="1",
     ).strip()
 
@@ -127,13 +147,13 @@ def ask_genre() -> str:
             _last_theme_desc = None
             return g_raw
         # 0 = 自定义类型，但没输入内容 → 让用户再输一次
-        custom = prompt("自定义类型", default="").strip()
+        custom = prompt(t("genre.custom_type"), default="").strip()
         _last_theme_desc = None
         return custom or ch_name
 
     g_idx = int(g_raw) - 1
     if not (0 <= g_idx < len(genre_keys)):
-        warn(f"无效编号 {g_raw}，将按自定义题材处理。")
+        warn(t("genre.invalid_custom", value=g_raw))
         _last_theme_desc = None
         return g_raw
 
@@ -147,14 +167,14 @@ def ask_genre() -> str:
         _last_theme_desc = None
         return g_name
 
-    print_subheader(f"「{g_name}」细分主题", color=C.ACCENT)
+    print_subheader(t("genre.theme_subtitle", name=g_name), color=C.ACCENT)
     cards: List[Tuple[int, str, str]] = [
         (i + 1, t.get("name", "?"), t.get("desc", ""))
         for i, t in enumerate(themes)
     ]
     print_creative_cards(cards)
     raw = prompt(
-        f"输入数字选题材，或直接输入自定义题材",
+        t("genre.theme_prompt"),
         default="1",
     ).strip()
 
@@ -167,7 +187,7 @@ def ask_genre() -> str:
     if 0 <= idx < len(themes):
         _last_theme_desc = themes[idx].get("desc")
     else:
-        warn(f"无效编号 {raw}，将按自定义题材处理。")
+        warn(t("genre.invalid_custom", value=raw))
         _last_theme_desc = None
         return raw
     return g_name
@@ -179,12 +199,12 @@ def ask_genre() -> str:
 def ask_project_name() -> str:
     """询问项目名（初始目录名）。空名校验。"""
     init()
-    print_subheader("创建项目目录", color=C.PRIMARY)
+    print_subheader(t("cli.project_dir_title"), color=C.PRIMARY)
     while True:
-        name = prompt("项目名（用于创建项目目录）")
+        name = prompt(t("cli.project_name_prompt"))
         if name:
             return name
-        warn("项目名不能为空，请重新输入。")
+        warn(t("cli.project_name_empty"))
 
 
 # ---------------------------------------------------------------------------
@@ -194,19 +214,19 @@ def ask_user_description() -> str:
     """询问用户对小说的描述 / 想法 / 要求。默认值为 ask_genre 选中小类的 desc。"""
     global _last_theme_desc
     init()
-    print_subheader("补充说明", color=C.PRIMARY)
+    print_subheader(t("cli.description_title"), color=C.PRIMARY)
     default = _last_theme_desc or ""
     if default:
-        info("默认值来自所选小类主题，可直接回车或修改。")
+        info(t("cli.description_default_hint"))
     desc = prompt(
-        "对小说的想法、描述或要求（可为空）",
+        t("cli.description_prompt"),
         default=default,
         show_default=False,
         preface=f"({default})" if default else None,
     )
     # 一旦消费完就清空，防止后续误用
     _last_theme_desc = None
-    return desc if desc else "无"
+    return desc if desc else t("common.none")
 
 
 # ---------------------------------------------------------------------------
@@ -219,21 +239,22 @@ def ask_novel_size() -> str:
     通过 select 数字选 1-4，默认 2（中篇）。
     """
     init()
-    print_subheader("小说规模", color=C.PRIMARY)
+    print_subheader(t("size.title"), color=C.PRIMARY)
     items: List[Tuple[int, str, str]] = [
-        (i + 1, label, f"{words // 10_000}万字") for i, (label, words) in enumerate(NOVEL_SIZES)
+        (i + 1, t(f"size.{label}", default=label), t("size.words", words=words // 10_000))
+        for i, (label, words) in enumerate(NOVEL_SIZES)
     ]
-    print_choices_table(items, title="请选择小说规模", allow_custom=False)
-    raw = prompt("请选择", default="2").strip()
+    print_choices_table(items, title=t("size.choose_title"), allow_custom=False)
+    raw = prompt(t("common.choose"), default="2").strip()
     if not raw.isdigit():
-        warn(f"无效编号 {raw}，使用默认中篇。")
+        warn(t("size.invalid_default", value=raw))
         return "中篇"
     idx = int(raw) - 1
     if not (0 <= idx < len(NOVEL_SIZES)):
-        warn(f"无效编号 {raw}，使用默认中篇。")
+        warn(t("size.invalid_default", value=raw))
         return "中篇"
     label, words = NOVEL_SIZES[idx]
-    info(f"已选规模：{label}（约 {words // 10_000} 万字）")
+    info(t("size.selected", label=t(f"size.{label}", default=label), words=words // 10_000))
     return label
 
 

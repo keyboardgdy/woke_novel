@@ -17,6 +17,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import ui
+import i18n as i18n_module
+from i18n import t
 from ui import C, I, error, info, line, note, print_section, prompt as ui_prompt, step_header, \
     step_result, spinner, success, warn
 from path_resolver import PathResolver, PROJECTS_ROOT, LOGS_ROOT
@@ -71,6 +73,10 @@ STEP_NAMES = {
 }
 
 
+def step_name(step: str) -> str:
+    return t(f"step_name.{step}", default=STEP_NAMES.get(step, step))
+
+
 # 中文数字解析（支持 0-99，兼容 "三"/"十"/"十二"/"二十"/"二十六" 等写法）
 _CN_DIGITS = {'零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
               '五': 5, '六': 6, '七': 7, '八': 8, '九': 9}
@@ -112,14 +118,14 @@ def _prompt_int_fallback(label: str, hint: str = "") -> Optional[int]:
     返回的整数保证 > 0；跳过时返回 None，由调用方决定降级策略。
     """
     if not sys.stdin.isatty():
-        warn(f"非交互环境，无法手动兜底输入「{label}」")
+        warn(t("runner.manual_noninteractive", label=label))
         return None
 
     line(color=C.DIM)
-    warn(f"「{label}」自动提取失败，进入手动兜底输入")
+    warn(t("runner.manual_start", label=label))
     if hint:
         note(hint)
-    note("提示：输入正整数确认；直接回车或输入 q 跳过（流程将降级处理）")
+    note(t("runner.manual_hint"))
 
     def _valid(s: str) -> bool:
         s = s.strip()
@@ -128,19 +134,19 @@ def _prompt_int_fallback(label: str, hint: str = "") -> Optional[int]:
         return s.isdigit() and int(s) > 0
 
     try:
-        raw = ui_prompt(f"请手动输入「{label}」", default="", validator=_valid)
+        raw = ui_prompt(t("runner.manual_prompt", label=label), default="", validator=_valid)
     except (EOFError, KeyboardInterrupt):
         print()
-        warn(f"已取消「{label}」的手动输入")
+        warn(t("runner.manual_cancelled", label=label))
         return None
 
     raw = (raw or "").strip()
     if not raw or raw.lower() == "q":
-        warn(f"用户跳过「{label}」的手动输入")
+        warn(t("runner.manual_skipped", label=label))
         return None
 
     n = int(raw)
-    success(f"已手动设置「{label}」= {n}")
+    success(t("runner.manual_set", label=label, value=n))
     return n
 
 
@@ -150,11 +156,13 @@ class WorkflowRunner:
     def __init__(self, project_name: str, genre: str = "都市", dry_run: bool = False,
                  auto_create: bool = True, max_retries: int = 3,
                  novel_size: str = "中篇", target_word_count: int = 300_000,
-                 provider: str = "claude"):
+                 provider: str = "claude", language: str = "zh"):
         self.project_name = project_name
         self.genre = genre
         self.dry_run = dry_run
         self.provider = self._normalize_provider(provider)
+        self.language = "en" if (language or "zh").strip().lower() == "en" else "zh"
+        i18n_module.set_language(self.language)
         self.novel_size = novel_size
         self.target_word_count = target_word_count
         self.round = 1
@@ -182,7 +190,8 @@ class WorkflowRunner:
         # 创建路径解析器
         self.path_resolver = PathResolver(project_name, genre,
                                           novel_size=novel_size,
-                                          target_word_count=target_word_count)
+                                          target_word_count=target_word_count,
+                                          language=self.language)
 
         # 项目信息管理
         self.project_info = ProjectInfo(project_name)
@@ -204,6 +213,21 @@ class WorkflowRunner:
 
         # 会话管理
         self._session_uuids: Dict[str, str] = {}
+
+    def _creative_file(self, option_num: int) -> Path:
+        name = f"Creative_Proposal_{option_num}.md" if self.language == "en" else f"创意方案_{option_num}.md"
+        return PROJECTS_ROOT / self.project_name / "00_baseline" / name
+
+    def _state_file(self, round_num: int) -> Path:
+        name = f"State_v{round_num}.md" if self.language == "en" else f"状态v{round_num}.md"
+        return PROJECTS_ROOT / self.project_name / "03_state" / name
+
+    def _story_summary_file(self) -> Path:
+        name = "Story_Summary.md" if self.language == "en" else "故事总梗概.md"
+        return PROJECTS_ROOT / self.project_name / "03_state" / name
+
+    def skeleton_file_name(self, act_num: int) -> str:
+        return f"Core_Skeleton_{act_num}.md" if self.language == "en" else f"核心骨架_{act_num}.md"
 
     def make_display_id(self, session_name: str) -> str:
         """生成会话ID"""
@@ -236,7 +260,7 @@ class WorkflowRunner:
         """规范化 CLI 后端名称。"""
         normalized = (provider or "claude").strip().lower()
         if normalized not in {"claude", "codex"}:
-            raise ValueError(f"不支持的 CLI 后端: {provider}（可选: claude / codex）")
+            raise ValueError(t("runner.unsupported_provider", provider=provider))
         return normalized
 
     def execute_step(self, step: str, prompt: str, display_id: str,
@@ -253,13 +277,13 @@ class WorkflowRunner:
             session_uuid = str(uuid.uuid4())
 
         mode = "dry" if self.dry_run else "run"
-        step_header(step, STEP_NAMES.get(step, step), display_id, mode=mode)
+        step_header(step, step_name(step), display_id, mode=mode)
 
         if self.dry_run:
-            note(f"干运行 · 模板 {STEP_FILES.get(step, 'unknown')}")
+            note(t("runner.dry_template", template=self.path_resolver.get_step_file_path(step).name))
             dry_result = self._dry_result()
             self._log_step(step, prompt, [(dry_result, 1)], display_id, session_uuid)
-            step_result(True, message=f"(干运行) 已跳过 {self.provider} 调用")
+            step_result(True, message=t("runner.dry_skipped", provider=self.provider))
             return dry_result
 
         # 检查外部 CLI 命令
@@ -296,8 +320,9 @@ class WorkflowRunner:
                 if is_retry:
                     backoff = self._retry_backoff(attempt - 1)
                     warn(
-                        f"↻ 步骤 {step} 重试 {attempt - 1}/{self.max_retries}"
-                        f"（{backoff:.0f}s 后开始 · 续接会话 {session_uuid[:8]}）"
+                        t("runner.retry", step=step, retry=attempt - 1,
+                          max_retries=self.max_retries, seconds=f"{backoff:.0f}",
+                          session=session_uuid[:8])
                     )
                     time.sleep(backoff)
 
@@ -309,10 +334,12 @@ class WorkflowRunner:
                     cli_cmd, temp_path, prompt, effective_session_uuid, effective_resume
                 )
 
-                spinner_label = (
-                    f"调用 {self.provider}（{I.STEP} {step}"
-                    + (f" · 重试 {attempt - 1}" if is_retry else "")
-                    + "）"
+                spinner_label = t(
+                    "runner.spinner_call",
+                    provider=self.provider,
+                    step_icon=I.STEP,
+                    step=step,
+                    retry_part=t("runner.spinner_retry_part", retry=attempt - 1) if is_retry else "",
                 )
 
                 # 调用外部 CLI，期间显示 spinner + elapsed
@@ -335,9 +362,9 @@ class WorkflowRunner:
                             process.kill()
                             stdout, stderr = process.communicate()
                             timed_out = True
-                            warn("命令执行超时（>1800s）")
+                            warn(t("runner.timeout", seconds=1800))
                 except FileNotFoundError as e:
-                    error(f"启动子进程失败：{e}")
+                    error(t("runner.spawn_failed", error=e))
                     return None
 
                 elapsed = time.monotonic() - start
@@ -358,16 +385,16 @@ class WorkflowRunner:
 
                 if result.returncode == 0:
                     if is_retry:
-                        success(f"步骤 {step} 在第 {attempt}/{max_attempts} 次尝试时成功")
+                        success(t("runner.retry_success", step=step, attempt=attempt, max_attempts=max_attempts))
                     step_result(True, elapsed=elapsed)
                     break
 
                 err = (
-                    f"超时（>1800s）" if timed_out
+                    t("runner.timeout_short", seconds=1800) if timed_out
                     else (result.stderr[:200] if result.stderr else "unknown error")
                 )
                 if attempt < max_attempts:
-                    warn(f"步骤 {step} 第 {attempt}/{max_attempts} 次尝试失败：{err}")
+                    warn(t("runner.attempt_failed", step=step, attempt=attempt, max_attempts=max_attempts, error=err))
                 else:
                     step_result(False, message=err, elapsed=elapsed)
 
@@ -385,7 +412,7 @@ class WorkflowRunner:
         """干运行假结果"""
         class DryResult:
             returncode = 0
-            stdout = "[干运行] 模拟成功"
+            stdout = t("runner.dry_stdout")
             stderr = ""
             elapsed = 0.0
             timed_out = False
@@ -409,27 +436,27 @@ class WorkflowRunner:
         log_file = log_dir / f"{seq_str}_step_{step}{act_str}_R{self.round}_{session_str}.log"
 
         with open(log_file, 'w', encoding='utf-8') as f:
-            f.write(f"步骤: {step}\n")
-            f.write(f"轮次: {self.round}\n")
-            f.write(f"幕次: {self._current_act_num or 'N/A'}\n")
-            f.write(f"显示ID: {display_id}\n")
-            f.write(f"CLI后端: {self.provider}\n")
-            f.write(f"会话UUID: {session_uuid}\n")
-            f.write(f"时间: {datetime.now().isoformat()}\n")
-            f.write(f"尝试次数: {len(attempts)}\n")
+            f.write(f"{t('log.step')}: {step}\n")
+            f.write(f"{t('log.round')}: {self.round}\n")
+            f.write(f"{t('log.act')}: {self._current_act_num or 'N/A'}\n")
+            f.write(f"{t('log.display_id')}: {display_id}\n")
+            f.write(f"{t('log.provider')}: {self.provider}\n")
+            f.write(f"{t('log.session_uuid')}: {session_uuid}\n")
+            f.write(f"{t('log.time')}: {datetime.now().isoformat()}\n")
+            f.write(f"{t('log.attempts')}: {len(attempts)}\n")
             f.write(f"\n--- Prompt ({len(prompt)} chars) ---\n")
             f.write(prompt)
             f.write("\n")
             for result, attempt in attempts:
                 f.write(f"\n{'='*60}\n")
-                f.write(f"--- 尝试 {attempt} ---\n")
+                f.write(t("log.attempt_header", attempt=attempt) + "\n")
                 f.write(f"{'='*60}\n")
-                f.write(f"返回码: {result.returncode}\n")
-                f.write(f"耗时: {result.elapsed:.2f}s\n")
+                f.write(f"{t('log.return_code')}: {result.returncode}\n")
+                f.write(f"{t('log.elapsed')}: {result.elapsed:.2f}s\n")
                 if getattr(result, 'timed_out', False):
-                    f.write(f"超时: 是\n")
+                    f.write(t("log.timeout_yes"))
                 if getattr(result, 'session_id', None):
-                    f.write(f"CLI会话ID: {result.session_id}\n")
+                    f.write(f"{t('log.cli_session_id')}: {result.session_id}\n")
                 if result.stdout:
                     f.write(f"\n--- Stdout ({len(result.stdout)} chars) ---\n")
                     f.write(result.stdout)
@@ -480,8 +507,8 @@ class WorkflowRunner:
 
     def _missing_cli_message(self, provider: str) -> str:
         if provider == "codex":
-            return "找不到 'codex' 命令（请确认 PATH 上有 codex / codex.cmd / codex.bat）"
-        return "找不到 'claude' 命令（请确认 PATH 上有 claude / claude.cmd / claude.bat）"
+            return t("runner.missing_codex")
+        return t("runner.missing_claude")
 
     def _extract_codex_session_id(self, stdout: str) -> Optional[str]:
         """从 Codex `--json` JSONL 输出中尽量解析 session id。"""
@@ -523,13 +550,13 @@ class WorkflowRunner:
         if not old_logs.exists():
             return
         if new_logs.exists():
-            warn(f"日志目标目录已存在，跳过迁移: {new_logs}")
+            warn(t("runner.log_target_exists", path=new_logs))
             return
         try:
             old_logs.rename(new_logs)
-            success(f"日志目录已重命名: {old_logs.name} → {new_logs.name}")
+            success(t("runner.log_renamed", old=old_logs.name, new=new_logs.name))
         except Exception as e:
-            warn(f"日志目录迁移失败（项目目录已重命名）: {e}")
+            warn(t("runner.log_rename_failed", error=e))
 
     def rename_project(self, new_name: str) -> bool:
         """重命名项目文件夹"""
@@ -537,69 +564,73 @@ class WorkflowRunner:
         old_path = PROJECTS_ROOT / old_name
         new_path = PROJECTS_ROOT / new_name
         if not old_path.exists():
-            error(f"项目路径不存在: {old_path}")
+            error(t("structure.path_missing", path=old_path))
             return False
         if new_path.exists():
-            warn(f"目标路径已存在: {new_path}")
+            warn(t("structure.target_exists", path=new_path))
             return False
         try:
             old_path.rename(new_path)
-            success(f"项目已重命名: {old_name} → {new_name}")
+            success(t("structure.renamed", old=old_name, new=new_name))
             self.project_name = new_name
-            self.path_resolver = PathResolver(new_name, self.genre)
+            self.path_resolver = PathResolver(new_name, self.genre, language=self.language)
             self.project_info = ProjectInfo(new_name)
             self._rename_logs(old_name, new_name)
             return True
         except Exception as e:
-            info(f"直接重命名失败，尝试复制+删除策略…")
+            info(t("structure.rename_copy_fallback"))
             import shutil
             try:
                 shutil.copytree(old_path, new_path)
                 shutil.rmtree(old_path)
-                success(f"项目已重命名: {old_name} → {new_name}")
+                success(t("structure.renamed", old=old_name, new=new_name))
                 self.project_name = new_name
-                self.path_resolver = PathResolver(new_name, self.genre)
+                self.path_resolver = PathResolver(new_name, self.genre, language=self.language)
                 self.project_info = ProjectInfo(new_name)
                 self._rename_logs(old_name, new_name)
                 return True
             except Exception as e2:
-                error(f"重命名失败: {e2}")
+                error(t("structure.rename_failed", error=e2))
                 return False
 
     def extract_novel_name_from_creative(self, option_num: int) -> Optional[str]:
         """从创意方案文件中提取小说名"""
         if self.dry_run:
-            return "干运行小说"
-        creative_file = PROJECTS_ROOT / self.project_name / "00_baseline" / f"创意方案_{option_num}.md"
+            return t("runner.dry_novel_name")
+        creative_file = self._creative_file(option_num)
         if not creative_file.exists():
-            warn(f"创意方案文件不存在: {creative_file}")
+            warn(t("runner.creative_missing", path=creative_file))
             return None
         try:
             content = creative_file.read_text(encoding='utf-8')
             match = re.search(r'^#\s*创意方案[：:]\s*(.+)', content, re.MULTILINE)
+            if not match:
+                match = re.search(r'^#\s*Creative\s+Proposal[：:]\s*(.+)', content, re.MULTILINE | re.IGNORECASE)
             if match:
                 novel_name = match.group(1).strip()
                 # 移除文件名中的非法字符
                 novel_name = re.sub(r'[<>:"/\\|?*《》]', '', novel_name)
                 return novel_name
             else:
-                warn("无法从创意方案中提取小说名")
+                warn(t("runner.creative_name_failed"))
                 return None
         except Exception as e:
-            warn(f"读取创意方案文件失败: {e}")
+            warn(t("runner.creative_read_failed", error=e))
             return None
 
     def extract_ref_works_from_creative(self, option_num: int) -> Optional[str]:
         """从创意方案文件中提取参考作品，用于提示词渲染"""
         if self.dry_run:
-            return "《干运行参考作品》"
-        creative_file = PROJECTS_ROOT / self.project_name / "00_baseline" / f"创意方案_{option_num}.md"
+            return t("runner.dry_ref_works")
+        creative_file = self._creative_file(option_num)
         if not creative_file.exists():
             return None
         try:
             content = creative_file.read_text(encoding='utf-8')
             # 提取 ## 参考作品 部分
             match = re.search(r'^##\s*参考作品.*?\n(.*?)(?=^##)', content, re.MULTILINE | re.DOTALL)
+            if not match:
+                match = re.search(r'^##\s*Reference\s+Works.*?\n(.*?)(?=^##)', content, re.MULTILINE | re.DOTALL | re.IGNORECASE)
             if not match:
                 return None
             ref_section = match.group(1).strip()
@@ -615,18 +646,23 @@ class WorkflowRunner:
                     end_idx = rest.index('》')
                     title = rest[1:end_idx]  # 提取作品名
                     works.append(f"《{title}》")
+                else:
+                    title = rest.split(':', 1)[0].split('：', 1)[0].strip()
+                    title = re.sub(r'^(Title\s*/\s*Work|Work)\s*', '', title, flags=re.IGNORECASE).strip()
+                    if title:
+                        works.append(title)
             return '、'.join(works) if works else None
         except Exception as e:
-            warn(f"提取参考作品失败: {e}")
+            warn(t("runner.ref_extract_failed", error=e))
             return None
 
     def extract_summary_from_state(self, round_num: int) -> Optional[str]:
         """从状态文档提取本轮故事梗概"""
         if self.dry_run:
-            return f"[干运行] 第{round_num}轮故事梗概占位内容"
-        state_file = PROJECTS_ROOT / self.project_name / "03_state" / f"状态v{round_num}.md"
+            return t("runner.dry_summary", round=round_num)
+        state_file = self._state_file(round_num)
         if not state_file.exists():
-            warn(f"状态文档不存在: {state_file}")
+            warn(t("runner.state_missing", path=state_file))
             return None
         try:
             content = state_file.read_text(encoding='utf-8')
@@ -651,8 +687,8 @@ class WorkflowRunner:
             # 2) 兼容常见标题变体：标题层级、空格、编号、"本轮/故事梗概片段"等。
             summary_heading = (
                 r'^\s{0,3}#{1,6}\s*'
-                r'(?=[^\n]*梗概)'
-                r'(?![^\n]*(?:精简|写作指南|剧情方向|剧情设计))'
+                r'(?=[^\n]*(?:梗概|Summary))'
+                r'(?![^\n]*(?:精简|写作指南|剧情方向|剧情设计|Compression|Guide|Direction|Design))'
                 r'[^\n]*$'
             )
             match = re.search(
@@ -665,9 +701,9 @@ class WorkflowRunner:
 
             # 3) 兜底：状态文档通常在 "# 故事状态 vN" 后紧跟梗概；取下一个标题/分隔线前的第一段。
             match = re.search(
-                r'^\s{0,3}#{1,6}\s*故事状态\s*v?\d+\s*$\n(.*?)(?=\n\s*(?:#{1,6}\s+|---+\s*$)|\Z)',
+                r'^\s{0,3}#{1,6}\s*(?:故事状态|Story\s+State)\s*v?\d+\s*$\n(.*?)(?=\n\s*(?:#{1,6}\s+|---+\s*$)|\Z)',
                 content,
-                re.MULTILINE | re.DOTALL,
+                re.MULTILINE | re.DOTALL | re.IGNORECASE,
             )
             if match:
                 section = match.group(1).strip()
@@ -681,133 +717,148 @@ class WorkflowRunner:
 
             return None
         except Exception as e:
-            warn(f"提取故事梗概失败: {e}")
+            warn(t("runner.summary_extract_failed", error=e))
             return None
 
     def extract_and_create_story_summary(self, round_num: int) -> bool:
         """从状态文档提取梗概并创建故事总梗概.md"""
         summary = self.extract_summary_from_state(round_num)
         if not summary:
-            warn(f"无法从状态v{round_num}提取故事梗概")
+            warn(t("runner.summary_from_state_failed", round=round_num))
             return False
-        summary_file = PROJECTS_ROOT / self.project_name / "03_state" / "故事总梗概.md"
-        content = f"# 故事总梗概\n\n{summary}\n"
+        summary_file = self._story_summary_file()
+        heading = "Story Summary" if self.language == "en" else "故事总梗概"
+        content = f"# {heading}\n\n{summary}\n"
         summary_file.write_text(content, encoding='utf-8')
-        success(f"已创建故事总梗概.md（来自状态v{round_num}）")
+        success(t("runner.summary_created", file=summary_file.name, round=round_num))
         return True
 
     def append_story_summary(self, round_num: int) -> bool:
         """从状态文档提取梗概并追加到故事总梗概.md"""
         summary = self.extract_summary_from_state(round_num)
         if not summary:
-            warn(f"无法从状态v{round_num}提取故事梗概")
+            warn(t("runner.summary_from_state_failed", round=round_num))
             return False
-        summary_file = PROJECTS_ROOT / self.project_name / "03_state" / "故事总梗概.md"
+        summary_file = self._story_summary_file()
         existing = summary_file.read_text(encoding='utf-8') if summary_file.exists() else ""
         updated = existing + f"{summary}\n"
         summary_file.write_text(updated, encoding='utf-8')
-        success(f"已追加故事梗概到故事总梗概.md（来自状态v{round_num}）")
+        success(t("runner.summary_appended", file=summary_file.name, round=round_num))
         return True
 
     def sync_summary_to_state(self, round_num: int) -> bool:
         """将故事总梗概.md内容同步到对应状态文档的# 故事总梗概部分"""
         if self.dry_run:
-            note(f"干运行：跳过同步故事总梗概到状态v{round_num}.md")
+            note(t("runner.sync_summary_dry", round=round_num))
             return True
-        summary_file = PROJECTS_ROOT / self.project_name / "03_state" / "故事总梗概.md"
+        summary_file = self._story_summary_file()
         if not summary_file.exists():
-            warn("故事总梗概.md 不存在")
+            warn(t("runner.file_missing", file=summary_file.name))
             return False
         summary_content = summary_file.read_text(encoding='utf-8')
         # 去掉开头的 # 故事总梗概 标题
-        summary_text = re.sub(r'^#\s*故事总梗概\s*\n*', '', summary_content, flags=re.MULTILINE).strip()
+        summary_text = re.sub(r'^#\s*(?:故事总梗概|Story\s+Summary)\s*\n*', '', summary_content, flags=re.MULTILINE | re.IGNORECASE).strip()
 
-        state_file = PROJECTS_ROOT / self.project_name / "03_state" / f"状态v{round_num}.md"
+        state_file = self._state_file(round_num)
         if not state_file.exists():
-            warn(f"状态文档不存在: {state_file}")
+            warn(t("runner.state_missing", path=state_file))
             return False
         state_content = state_file.read_text(encoding='utf-8')
         # 替换 # 故事总梗概 部分
-        new_state_content = re.sub(
-            r'^#\s*故事总梗概\s*\n.*?(?=\n#|\n---|\Z)',
-            f"# 故事总梗概\n\n{summary_text}",
-            state_content,
-            flags=re.MULTILINE | re.DOTALL
-        )
+        if self.language == "en":
+            new_state_content = re.sub(
+                r'^#\s*Story\s+Summary\s*\n.*?(?=\n#|\n---|\Z)',
+                f"# Story Summary\n\n{summary_text}",
+                state_content,
+                flags=re.MULTILINE | re.DOTALL | re.IGNORECASE
+            )
+        else:
+            new_state_content = re.sub(
+                r'^#\s*故事总梗概\s*\n.*?(?=\n#|\n---|\Z)',
+                f"# 故事总梗概\n\n{summary_text}",
+                state_content,
+                flags=re.MULTILINE | re.DOTALL
+            )
         state_file.write_text(new_state_content, encoding='utf-8')
-        success(f"已将故事总梗概同步到状态v{round_num}.md")
+        success(t("runner.summary_synced", file=state_file.name))
         return True
 
     def extract_act_count_from_macro_model(self) -> Optional[int]:
         """从幕次框架.md中提取幕次总数"""
         if self.dry_run:
-            note(f"干运行：幕次总数 = {self._dry_default_act_count}")
+            note(t("runner.dry_act_count", count=self._dry_default_act_count))
             return self._dry_default_act_count
-        macro_file = PROJECTS_ROOT / self.project_name / "00_baseline" / "幕次框架.md"
+        macro_name = "Act_Framework.md" if self.language == "en" else "幕次框架.md"
+        macro_file = PROJECTS_ROOT / self.project_name / "00_baseline" / macro_name
         if not macro_file.exists():
-            warn(f"幕次框架.md 不存在: {macro_file}")
-            return _prompt_int_fallback("幕次总数", hint=f"未找到文件: {macro_file}")
+            warn(t("runner.path_missing", name=macro_name, path=macro_file))
+            return _prompt_int_fallback(t("runner.manual_act_label"), hint=t("export.missing_dir", path=macro_file))
         try:
             content = macro_file.read_text(encoding='utf-8')
             match = re.search(r'幕次总数[：:\s]*(\d+|[零一二三四五六七八九十]{1,3})\s*幕', content)
+            if not match:
+                match = re.search(r'Total\s+Acts[：:\s]*(\d+)\s*Acts?', content, re.IGNORECASE)
             if match:
                 num_str = match.group(1)
                 act_count = _parse_int_token(num_str)
                 if act_count is None:
-                    warn(f"无法解析幕次数字: {num_str}")
+                    warn(t("runner.unparseable_act", value=num_str))
                     return _prompt_int_fallback(
-                        "幕次总数",
-                        hint=f"正则捕获到 {num_str!r} 但无法转 int",
+                        t("runner.manual_act_label"),
+                        hint=t("runner.regex_int_failed", value=num_str),
                     )
-                note(f"提取幕次总数：{act_count}")
+                note(t("runner.extracted_act_count", count=act_count))
                 return act_count
-            warn("无法从幕次框架.md 中提取幕次总数")
+            warn(t("runner.act_count_not_found", file=macro_name))
             return _prompt_int_fallback(
-                "幕次总数",
-                hint=f"在 {macro_file.name} 中未匹配到 '幕次总数：N 幕' 模式",
+                t("runner.manual_act_label"),
+                hint=t("runner.act_count_pattern_hint", file=macro_file.name),
             )
         except Exception as e:
-            warn(f"提取幕次总数失败: {e}")
+            warn(t("runner.extract_act_failed", error=e))
             return _prompt_int_fallback(
-                "幕次总数",
-                hint=f"读取/解析 {macro_file.name} 时异常: {e}",
+                t("runner.manual_act_label"),
+                hint=t("runner.read_parse_failed", file=macro_file.name, error=e),
             )
 
     def extract_chapter_count_from_skeleton(self, act_num: int) -> Optional[int]:
         """从核心骨架_{act_num}.md中提取章节数"""
         if self.dry_run:
             chapter_count = self._dry_default_chapter_counts[act_num - 1] if act_num <= len(self._dry_default_chapter_counts) else 12
-            note(f"干运行：第 {act_num} 幕章节数 = {chapter_count}")
+            note(t("runner.dry_chapter_count", act=act_num, count=chapter_count))
             return chapter_count
-        label = f"第 {act_num} 幕章节数"
-        skeleton_file = PROJECTS_ROOT / self.project_name / "00_baseline" / f"核心骨架_{act_num}.md"
+        label = t("runner.chapter_label", act=act_num)
+        skeleton_name = self.skeleton_file_name(act_num)
+        skeleton_file = PROJECTS_ROOT / self.project_name / "00_baseline" / skeleton_name
         if not skeleton_file.exists():
-            warn(f"核心骨架_{act_num}.md 不存在: {skeleton_file}")
-            return _prompt_int_fallback(label, hint=f"未找到文件: {skeleton_file}")
+            warn(t("runner.path_missing", name=skeleton_name, path=skeleton_file))
+            return _prompt_int_fallback(label, hint=t("export.missing_dir", path=skeleton_file))
         try:
             content = skeleton_file.read_text(encoding='utf-8')
             match = re.search(r'章节数[：:\s]*(\d+|[零一二三四五六七八九十]{1,3})\s*章', content)
+            if not match:
+                match = re.search(r'Chapter\s+Count[：:\s]*(\d+)\s*Chapters?', content, re.IGNORECASE)
             if match:
                 num_str = match.group(1)
                 chapter_count = _parse_int_token(num_str)
                 if chapter_count is None:
-                    warn(f"无法解析章节数字: {num_str}")
+                    warn(t("runner.unparseable_chapter", value=num_str))
                     return _prompt_int_fallback(
                         label,
-                        hint=f"正则捕获到 {num_str!r} 但无法转 int",
+                        hint=t("runner.regex_int_failed", value=num_str),
                     )
-                note(f"提取{label}：{chapter_count}")
+                note(t("runner.extracted_chapter", label=label, count=chapter_count))
                 return chapter_count
-            warn(f"无法从核心骨架_{act_num}.md 中提取章节数")
+            warn(t("runner.chapter_not_found", file=skeleton_name))
             return _prompt_int_fallback(
                 label,
-                hint=f"在 {skeleton_file.name} 中未匹配到 '章节数：N 章' 模式",
+                hint=t("runner.chapter_pattern_hint", file=skeleton_file.name),
             )
         except Exception as e:
-            warn(f"提取章节数失败: {e}")
+            warn(t("runner.extract_chapter_failed", error=e))
             return _prompt_int_fallback(
                 label,
-                hint=f"读取/解析 {skeleton_file.name} 时异常: {e}",
+                hint=t("runner.read_parse_failed", file=skeleton_file.name, error=e),
             )
 
     def extract_all_chapter_counts(self, act_count: int) -> List[int]:
@@ -815,13 +866,13 @@ class WorkflowRunner:
         if self.dry_run:
             chapter_counts = self._dry_default_chapter_counts[:act_count] if act_count <= len(self._dry_default_chapter_counts) else self._dry_default_chapter_counts * ((act_count // len(self._dry_default_chapter_counts)) + 1)
             chapter_counts = chapter_counts[:act_count]
-            note(f"干运行：各幕章节数 = {chapter_counts}，总章节数 = {sum(chapter_counts)}")
+            note(t("runner.dry_chapter_counts", counts=chapter_counts, total=sum(chapter_counts)))
             return chapter_counts
         chapter_counts = []
         for act_num in range(1, act_count + 1):
             count = self.extract_chapter_count_from_skeleton(act_num)
             if count is None or count <= 0:
-                warn(f"第 {act_num} 幕章节数最终未确定（提取失败且未手动输入），记 0；该幕创作循环将被跳过")
+                warn(t("runner.chapter_count_undetermined", act=act_num))
                 count = 0
             chapter_counts.append(count)
         return chapter_counts
@@ -861,15 +912,7 @@ class WorkflowRunner:
                                         novel_size=novel_size, target_word_count=target_word_count)
 
             # 拼接执行指令
-            prompt = (
-                "## 指令\n"
-                "立即执行以下任务，不准偷懒，不要询问。先分析 → 再执行 → 后压缩，不要跳过任何阶段。\n\n"
-                "压缩：审视你的回答，删除一切对核心结论无贡献的句子\n\n"
-                "请优先保证生成内容的质量与信息密度，而非数量。\n\n"
-                "路径规则：写入路径禁止任何修改。输出路径必须与指定路径完全一致。目标文件夹已预创建，直接写入指定路径即可\n\n"
-                "---\n\n"
-                + prompt
-            )
+            prompt = t("runner.instruction_prefix") + prompt
 
             # 第三层：CLI 执行
             result = self.execute_step(step, prompt, display_id, session_uuid, resume=is_resume)
@@ -893,25 +936,25 @@ class WorkflowRunner:
 
             return result is not None and result.returncode == 0
         except Exception as e:
-            error(f"步骤 {step} 执行异常: {e}")
+            error(t("runner.step_exception", step=step, error=e))
             return False
 
     def run_session_block(self, block_name: str, steps: List[str], act_num: int = None) -> bool:
         """在一个会话中顺序执行一组步骤"""
         display_id = self.make_display_id(block_name)
 
-        print_section(f"会话块 · {block_name}  ({len(steps)} 步)", color=C.PRIMARY)
+        print_section(t("runner.session_block_title", block=block_name, count=len(steps)), color=C.PRIMARY)
 
         ok = True
         for idx, step in enumerate(steps):
-            step_name = STEP_NAMES.get(step, step)
+            display_step_name = step_name(step)
             if idx > 0:
                 # 步骤间分隔线：上一次 step_result → 下一次 step 起始之间画细分隔
                 line(color=C.DIM)
-            note(f"{I.ARROW_R}  {step}  {step_name}")
+            note(f"{I.ARROW_R}  {step}  {display_step_name}")
 
             if not self.run_step(step, display_id, act_num=act_num):
-                error(f"步骤 {step} 失败，停止当前会话块")
+                error(t("runner.session_step_failed", step=step))
                 ok = False
                 break
 

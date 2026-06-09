@@ -81,6 +81,39 @@ menu.bat       # Windows
 
 The first run asks you to choose a backend, then guides you through genre selection, project naming, optional user description, idea selection, and full workflow execution.
 
+## Visual Console
+
+The project also includes a local web console for managing projects, running/resuming workflows, reading chapters, editing chapter text, viewing logs, and exporting MD/TXT/EPUB.
+
+Build the frontend once:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+Start the console:
+
+```bash
+python -m app_server.main
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8787
+```
+
+On Windows, `woke.bat` can start the backend quietly and open the browser:
+
+```bat
+woke
+```
+
+If you want `woke` to work from any terminal, add the repository root to your user `PATH`.
+
 ## Command Line Usage
 
 ```bash

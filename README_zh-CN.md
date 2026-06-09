@@ -100,6 +100,39 @@ python run_workflow.py loop -p my_novel -g 玄幻 --option-count 3
 
 第一次进入菜单会先选择 Claude CLI 或 Codex CLI，之后引导：选题材 → 输项目名 → 输用户描述（可选）→ 确认开篇 → 自动跑完全流程。
 
+### 5. 可视化前端
+
+可视化前端用于项目管理、工作流启动/续跑、章节阅读与编辑、日志查看，以及 MD/TXT/EPUB 导出。
+
+首次使用先构建前端：
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+手动启动本地 Web 控制台：
+
+```bash
+python -m app_server.main
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8787
+```
+
+Windows 也可以使用项目根目录的 `woke.bat` 一键启动：它会静默启动后端并打开浏览器。
+
+```bat
+woke
+```
+
+如果希望在任意命令行直接输入 `woke`，把 `D:\woke_novel` 或你的项目根目录加入用户 `PATH`。
+
 ### 后端与自动批准
 
 工作流会把每一步 prompt 投喂给外部 CLI 子进程，并要求模型直接把产物写入 `projects/<小说名>/`。为了避免非交互式流水线卡在权限确认界面，当前实现会自动跳过 CLI 审批：

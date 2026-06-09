@@ -10,8 +10,15 @@ import shutil
 import subprocess
 import sys
 import json
+import posixpath
+import re
+import zipfile
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -609,6 +616,232 @@ def settings_mode() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 工具
+# ---------------------------------------------------------------------------
+class _EpubTextParser(HTMLParser):
+    """Convert simple XHTML content from EPUB spine items into plain text."""
+
+    _BLOCK_TAGS = {
+        "address", "article", "aside", "blockquote", "br", "div", "dl", "dt",
+        "dd", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5",
+        "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre",
+        "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+    }
+    _SKIP_TAGS = {"script", "style"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: List[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        tag = tag.lower()
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if self._skip_depth:
+            return
+        if tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self._parts.append(data)
+
+    def text(self) -> str:
+        raw = unescape("".join(self._parts)).replace("\r", "\n")
+        lines = [re.sub(r"[ \t\f\v]+", " ", line).strip() for line in raw.splitlines()]
+        collapsed: List[str] = []
+        blank_seen = False
+        for line in lines:
+            if not line:
+                if collapsed and not blank_seen:
+                    collapsed.append("")
+                    blank_seen = True
+                continue
+            collapsed.append(line)
+            blank_seen = False
+        return "\n".join(collapsed).strip()
+
+
+def _safe_output_name(title: str, index: int) -> str:
+    safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title).strip(" .")
+    if not safe:
+        safe = t("ui.chapter_title", index=index)
+    return f"{index:03d}_{safe[:80]}.txt"
+
+
+def _read_zip_text(zf: zipfile.ZipFile, name: str) -> str:
+    data = zf.read(name)
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def _parse_xml_bytes(data: bytes) -> ET.Element:
+    return ET.fromstring(data)
+
+
+def _xml_attr(element: ET.Element, name: str) -> Optional[str]:
+    value = element.attrib.get(name)
+    if value is not None:
+        return value
+    for key, value in element.attrib.items():
+        if key.endswith("}" + name):
+            return value
+    return None
+
+
+def _element_text(element: Optional[ET.Element]) -> str:
+    if element is None:
+        return ""
+    return "".join(element.itertext()).strip()
+
+
+def _find_opf_path(zf: zipfile.ZipFile) -> str:
+    container = _parse_xml_bytes(zf.read("META-INF/container.xml"))
+    for element in container.iter():
+        if element.tag.endswith("rootfile"):
+            path = _xml_attr(element, "full-path")
+            if path:
+                return path
+    raise ValueError(t("tools.epub_missing_opf"))
+
+
+def _chapter_title_from_html(html: str, fallback: str) -> str:
+    try:
+        root = ET.fromstring(html.encode("utf-8"))
+    except ET.ParseError:
+        match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip() or fallback
+        return fallback
+
+    for element in root.iter():
+        if element.tag.lower().endswith("title"):
+            title = _element_text(element)
+            if title:
+                return title
+    for element in root.iter():
+        local = element.tag.rsplit("}", 1)[-1].lower()
+        if local in {"h1", "h2", "h3"}:
+            title = _element_text(element)
+            if title:
+                return title
+    return fallback
+
+
+def split_epub_to_txt(epub_path: Path) -> Tuple[Path, int]:
+    """Split EPUB spine documents into one txt file per chapter."""
+    if not epub_path.exists():
+        raise FileNotFoundError(t("tools.epub_path_missing", path=epub_path))
+    if not epub_path.is_file() or epub_path.suffix.lower() != ".epub":
+        raise ValueError(t("tools.epub_invalid"))
+
+    output_dir = epub_path.parent / "Output"
+    output_dir.mkdir(exist_ok=True)
+
+    with zipfile.ZipFile(epub_path) as zf:
+        opf_path = _find_opf_path(zf)
+        opf_root = _parse_xml_bytes(zf.read(opf_path))
+        opf_dir = posixpath.dirname(opf_path)
+
+        manifest: Dict[str, Dict[str, str]] = {}
+        spine_ids: List[str] = []
+        for element in opf_root.iter():
+            tag = element.tag.rsplit("}", 1)[-1]
+            if tag == "item":
+                item_id = _xml_attr(element, "id")
+                href = _xml_attr(element, "href")
+                media_type = _xml_attr(element, "media-type") or ""
+                if item_id and href:
+                    manifest[item_id] = {"href": href, "media_type": media_type}
+            elif tag == "itemref":
+                idref = _xml_attr(element, "idref")
+                if idref:
+                    spine_ids.append(idref)
+
+        count = 0
+        used_names = set()
+        for idref in spine_ids:
+            item = manifest.get(idref)
+            if not item or "html" not in item["media_type"].lower():
+                continue
+
+            href = unquote(item["href"].split("#", 1)[0])
+            chapter_path = posixpath.normpath(posixpath.join(opf_dir, href))
+            if chapter_path.startswith("../") or chapter_path not in zf.namelist():
+                continue
+
+            html = _read_zip_text(zf, chapter_path)
+            parser = _EpubTextParser()
+            parser.feed(html)
+            text = parser.text()
+            if not text:
+                continue
+
+            count += 1
+            fallback = t("ui.chapter_title", index=count)
+            title = _chapter_title_from_html(html, fallback)
+            file_name = _safe_output_name(title, count)
+            while file_name.lower() in used_names:
+                file_name = _safe_output_name(f"{title}_{count}", count)
+            used_names.add(file_name.lower())
+            (output_dir / file_name).write_text(text + "\n", encoding="utf-8")
+
+    if count == 0:
+        raise ValueError(t("tools.epub_no_chapters"))
+    return output_dir, count
+
+
+def tools_mode() -> None:
+    """Tools submenu."""
+    clear()
+    print_banner(t("tools.title"), subtitle=t("tools.subtitle"))
+
+    options = [
+        t("tools.split_epub_option"),
+        t("tools.back"),
+    ]
+    idx = select(t("tools.prompt"), options, default=0)
+    if idx == 1:
+        return
+
+    epub_input = prompt(t("tools.epub_path_prompt"), show_default=False).strip().strip('"')
+    if not epub_input:
+        warn(t("common.cancelled"))
+        press_enter()
+        return
+
+    try:
+        output_dir, count = split_epub_to_txt(Path(epub_input).expanduser())
+    except Exception as e:
+        error(t("tools.epub_split_failed", error=e))
+        press_enter()
+        return
+
+    print_section(t("tools.epub_split_done"), color=C.SUCCESS)
+    print_kv([
+        (t("tools.epub_output_dir"), str(output_dir)),
+        (t("tools.epub_output_count"), str(count)),
+    ])
+    press_enter()
+
+
+# ---------------------------------------------------------------------------
 # 导出功能
 # ---------------------------------------------------------------------------
 def export_mode() -> None:
@@ -802,6 +1035,7 @@ def main() -> None:
             t("main.continue_option"),
             t("main.steps_option"),
             t("main.export_option"),
+            t("main.tools_option"),
             t("main.delete_option"),
             t("main.settings_option"),
             t("main.exit_option"),
@@ -813,10 +1047,11 @@ def main() -> None:
             continue_mode,
             view_steps_list,
             export_mode,
+            tools_mode,
             delete_project_mode,
             settings_mode,
         ]
-        if idx == 7:
+        if idx == 8:
             print_panel(t("main.goodbye_title"), t("main.goodbye_body"), color=C.ACCENT, icon=I.STAR)
             break
         try:

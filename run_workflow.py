@@ -35,6 +35,7 @@ def _print_usage() -> None:
         ("single <step>",         t("usage.single")),
         ("session <block> <...>", t("usage.session")),
         ("init",                  t("usage.init")),
+        ("creative",              "Generate creative proposals and pause"),
         ("loop",                  t("usage.loop")),
         ("continue",              t("usage.continue")),
     ], key_color=C.ACCENT, value_color=C.MUTED)
@@ -257,7 +258,8 @@ def _run_or_exit(ok: bool, message: str) -> None:
 
 
 def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count: int = 3,
-                             user_description: str = "") -> None:
+                             user_description: str = "",
+                             auto_select_option: int = None) -> None:
     executor = WorkflowExecutor(runner, cursor)
     runner.project_info.update(option_count=option_count)
     creative_display_id = runner.make_display_id("creative_option")
@@ -281,7 +283,13 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
 
     def choose_creative() -> bool:
         nonlocal chosen
-        chosen = select_creative(runner, option_count)
+        if chosen:
+            note(f"Creative option already selected: {chosen}")
+        elif auto_select_option:
+            chosen = max(1, min(auto_select_option, option_count))
+            note(f"Auto selected creative option: {chosen}")
+        else:
+            chosen = select_creative(runner, option_count)
         success(t("workflow.creative_selected", index=chosen))
         runner.option_index = chosen
         return True
@@ -556,7 +564,7 @@ def main() -> None:
         ])
         sys.exit(0)
 
-    elif command == "loop":
+    elif command == "creative":
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
@@ -586,6 +594,56 @@ def main() -> None:
                                 max_retries=args.max_retries,
                                 novel_size=novel_size, target_word_count=target_word_count,
                                 provider=args.provider, language=args.language)
+        runner.project_info.update(option_count=args.option_count)
+        creative_display_id = runner.make_display_id("creative_option")
+
+        print_section(t("workflow.session_creative"), color=C.PRIMARY)
+        for option_index in range(1, args.option_count + 1):
+            if option_index > 1:
+                line(color=C.DIM)
+            note(t("workflow.generate_option", index=option_index, total=args.option_count))
+            _run_or_exit(
+                runner.run_step(
+                    "01", creative_display_id,
+                    option_index=option_index, user_description=user_description,
+                ),
+                t("workflow.creative_generation_failed"),
+            )
+        success("创意方案已生成，等待用户选择后继续。")
+        sys.exit(0)
+
+    elif command == "loop":
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
+        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+                            help=t("argparse.provider_help"))
+        parser.add_argument("--language", choices=["zh", "en"], default="zh",
+                            help=t("argparse.language_help"))
+        parser.add_argument("--option-count", type=int, default=3, help=t("argparse.option_count_help"))
+        parser.add_argument("--genre", default=None, help=t("argparse.genre_help"))
+        parser.add_argument("--project-name", default=None, help=t("argparse.project_name_help"))
+        parser.add_argument("--max-retries", type=int, default=3,
+                            help=t("argparse.retry_help"))
+        parser.add_argument("--user-description", default=None,
+                            help=t("argparse.user_description_help"))
+        parser.add_argument("--novel-size", default=None,
+                            help=t("argparse.novel_size_help"))
+        parser.add_argument("--auto-select-option", type=int, default=None,
+                            help="Non-interactive creative option index for full pipeline runs.")
+        args = parser.parse_args(sys.argv[2:])
+
+        cli_module.set_language(args.language)
+        genre = args.genre or ask_genre()
+        project_name = args.project_name or ask_project_name()
+        user_description = args.user_description or ask_user_description()
+        novel_size = args.novel_size or ask_novel_size()
+        target_word_count = size_to_word_count(novel_size)
+
+        runner = WorkflowRunner(project_name, genre, dry_run=args.dry,
+                                max_retries=args.max_retries,
+                                novel_size=novel_size, target_word_count=target_word_count,
+                                provider=args.provider, language=args.language)
 
         print_banner(
             t("workflow.banner_project", project=runner.project_name),
@@ -598,6 +656,7 @@ def main() -> None:
             runner,
             option_count=args.option_count,
             user_description=user_description,
+            auto_select_option=args.auto_select_option,
         )
 
         print_done(

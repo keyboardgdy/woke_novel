@@ -26,6 +26,10 @@ venv/
 env/
 ENV/
 
+# ====== 前端依赖 / 构建缓存 ======
+node_modules/
+*.tsbuildinfo
+
 # ====== 工作流运行产物(根目录) ======
 # 只排除目录里的内容,空目录本身靠 .gitkeep 占位提交
 logs/*

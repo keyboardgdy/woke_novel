@@ -12,6 +12,7 @@ import time
 import uuid
 import re
 import json
+import atexit
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -213,6 +214,45 @@ class WorkflowRunner:
 
         # 会话管理
         self._session_uuids: Dict[str, str] = {}
+        self._run_status_path = PROJECTS_ROOT / self.project_name / ".run_status.json"
+        self._run_status_token = uuid.uuid4().hex
+        self._write_run_status()
+        atexit.register(self._clear_run_status)
+
+    def _write_run_status(self) -> None:
+        try:
+            self._run_status_path.parent.mkdir(parents=True, exist_ok=True)
+            self._run_status_path.write_text(
+                json.dumps(
+                    {
+                        "project_name": self.project_name,
+                        "pid": os.getpid(),
+                        "status": "running",
+                        "source": "cli",
+                        "token": self._run_status_token,
+                        "mode": "workflow",
+                        "provider": self.provider,
+                        "language": self.language,
+                        "dry_run": self.dry_run,
+                        "started_at": datetime.now().isoformat(),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    def _clear_run_status(self) -> None:
+        try:
+            if not self._run_status_path.exists():
+                return
+            data = json.loads(self._run_status_path.read_text(encoding="utf-8"))
+            if data.get("token") == self._run_status_token and data.get("pid") == os.getpid():
+                self._run_status_path.unlink()
+        except Exception:
+            pass
 
     def _creative_file(self, option_num: int) -> Path:
         name = f"Creative_Proposal_{option_num}.md" if self.language == "en" else f"创意方案_{option_num}.md"
@@ -575,6 +615,8 @@ class WorkflowRunner:
             self.project_name = new_name
             self.path_resolver = PathResolver(new_name, self.genre, language=self.language)
             self.project_info = ProjectInfo(new_name)
+            self._run_status_path = PROJECTS_ROOT / new_name / ".run_status.json"
+            self._write_run_status()
             self._rename_logs(old_name, new_name)
             return True
         except Exception as e:
@@ -587,6 +629,8 @@ class WorkflowRunner:
                 self.project_name = new_name
                 self.path_resolver = PathResolver(new_name, self.genre, language=self.language)
                 self.project_info = ProjectInfo(new_name)
+                self._run_status_path = PROJECTS_ROOT / new_name / ".run_status.json"
+                self._write_run_status()
                 self._rename_logs(old_name, new_name)
                 return True
             except Exception as e2:

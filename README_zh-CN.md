@@ -39,9 +39,20 @@
 **适用场景**：想从零写一部 30 章、3 幕结构的中文长篇网文（玄幻/都市/仙侠/科幻/游戏/其他），
 且希望每一步都遵循一套可复用的硬约束（创作宪法、故事演化原则、流程编排、六大创意技巧）。
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/Screenshots04.png" alt="woke_novel 可视化前端截图 1" width="49%" />
+  <img src="assets/Screenshots01.png" alt="woke_novel 可视化前端截图 2" width="49%" />
+</p>
+<p align="center">
+  <img src="assets/Screenshots03.png" alt="woke_novel 可视化前端截图 3" width="49%" />
+  <img src="assets/Screenshots02.png" alt="woke_novel 可视化前端截图 4" width="49%" />
+</p>
+
 ---
 不会配置？进群解决
-<img src="assets/img1.jpg" width="300" />
+<img src="assets/img01.jpg" width="300" />
 
 ## 快速开始
 
@@ -146,7 +157,7 @@ woke
 
 ---
 woke_novel技术交流群
-<img src="assets/img1.jpg" width="300" />
+<img src="assets/img01.jpg" width="300" />
 加入我们
 
 ---

@@ -1614,8 +1614,8 @@ function ChaptersPage({
     saveChapter.reset();
   };
   return (
-    <section className="page split-page">
-      <div className="panel">
+    <section className="page split-page chapters-page">
+      <div className="panel chapter-sidebar">
         <h2><BookOpen size={18} /> 章节列表</h2>
         <div className="chapter-stats">
           <Metric label="已生成" value={chapters.data?.generated || 0} />
@@ -1630,7 +1630,7 @@ function ChaptersPage({
           ))}
         </div>
       </div>
-      <div className="panel reader">
+      <div className="panel reader chapter-reader">
         <div className="reader-title-row">
           <h2><ScrollText size={18} /> 正文阅读</h2>
           {selectedFile ? (

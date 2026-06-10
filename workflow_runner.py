@@ -385,6 +385,7 @@ class WorkflowRunner:
                 # 调用外部 CLI，期间显示 spinner + elapsed
                 start = time.monotonic()
                 timed_out = False
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
                 try:
                     with spinner(spinner_label, color=C.PRIMARY):
                         process = subprocess.Popen(
@@ -394,6 +395,7 @@ class WorkflowRunner:
                             stderr=subprocess.PIPE,
                             stdin=subprocess.PIPE if stdin_payload is not None else None,
                             cwd=self.path_resolver.project_root,
+                            creationflags=creationflags,
                         )
                         try:
                             input_bytes = stdin_payload.encode("utf-8") if stdin_payload is not None else None

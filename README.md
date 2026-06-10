@@ -21,6 +21,18 @@ Fully automated long-form novel generation workflow for Claude CLI or Codex CLI.
 
 The workflow is designed for resumable, template-driven generation of a roughly 30-chapter Chinese web novel, from idea selection through worldbuilding, characters, story arc, chapter drafts, state tracking, and act summaries.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/Screenshots04.png" alt="woke_novel 可视化前端截图 1" width="49%" />
+  <img src="assets/Screenshots01.png" alt="woke_novel 可视化前端截图 2" width="49%" />
+</p>
+<p align="center">
+  <img src="assets/Screenshots03.png" alt="woke_novel 可视化前端截图 3" width="49%" />
+  <img src="assets/Screenshots02.png" alt="woke_novel 可视化前端截图 4" width="49%" />
+</p>
+
+
 ## Features
 
 - **Claude CLI and Codex CLI support**: choose either backend from the interactive menu or pass `--provider claude/codex` on the command line.

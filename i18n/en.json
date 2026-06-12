@@ -337,6 +337,7 @@
   "runner.dry_template": "Dry run · Template {template}",
   "runner.dry_skipped": "(dry run) skipped {provider} call",
   "runner.retry": "↻ Step {step} retry {retry}/{max_retries} (starting in {seconds}s · resuming session {session})",
+  "runner.retry_new_session": "↻ Step {step} retry {retry}/{max_retries} (starting in {seconds}s · new session {session})",
   "runner.spinner_call": "Calling {provider} ({step_icon} {step}{retry_part})",
   "runner.spinner_retry_part": " · retry {retry}",
   "runner.timeout": "Command timed out (>{seconds}s)",

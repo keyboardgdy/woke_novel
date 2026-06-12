@@ -359,15 +359,22 @@ class WorkflowRunner:
                 is_retry = attempt > 1
                 if is_retry:
                     backoff = self._retry_backoff(attempt - 1)
+                    is_new_session = (attempt == max_attempts)
+                    msg_key = "runner.retry_new_session" if is_new_session else "runner.retry"
                     warn(
-                        t("runner.retry", step=step, retry=attempt - 1,
+                        t(msg_key, step=step, retry=attempt - 1,
                           max_retries=self.max_retries, seconds=f"{backoff:.0f}",
-                          session=session_uuid[:8])
+                          session=effective_session_uuid[:8])
                     )
                     time.sleep(backoff)
 
-                # 重试时强制续接上下文；Codex 首次执行后会尽量从 JSONL 输出解析真实 session id。
+                # 重试时强制续接上下文；第3次重试（attempt==max_attempts）开启新会话。
                 effective_resume = resume or is_retry
+                if is_retry and attempt == max_attempts:
+                    # 第3次重试 → 放弃旧上下文，起新会话
+                    effective_resume = False
+                    effective_session_uuid = str(uuid.uuid4())
+                    self._session_uuids[display_id] = effective_session_uuid
                 if self.provider == "codex" and not effective_session_uuid:
                     effective_resume = False
                 cmd, stdin_payload = self._build_cli_command(

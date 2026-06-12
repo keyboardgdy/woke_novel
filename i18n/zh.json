@@ -337,6 +337,7 @@
   "runner.dry_template": "干运行 · 模板 {template}",
   "runner.dry_skipped": "(干运行) 已跳过 {provider} 调用",
   "runner.retry": "↻ 步骤 {step} 重试 {retry}/{max_retries}（{seconds}s 后开始 · 续接会话 {session}）",
+  "runner.retry_new_session": "↻ 步骤 {step} 重试 {retry}/{max_retries}（{seconds}s 后开始 · 开启新会话 {session}）",
   "runner.spinner_call": "调用 {provider}（{step_icon} {step}{retry_part}）",
   "runner.spinner_retry_part": " · 重试 {retry}",
   "runner.timeout": "命令执行超时（>{seconds}s）",

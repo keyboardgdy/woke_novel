@@ -1,6 +1,12 @@
 # woke_novel
 全自动小说生成工具，**让 Claude / Codex 成为你的「中文网文自动生成工具」** *流水线 · 多幕 · 断点续写 · 强约束模板驱动*;Fully Automated Novel Generation Tool, Making Claude/Codex Your "Chinese Web Novel Auto-Generator";
 
+> ## 立即下载程序
+>
+> **最新版打包程序：[下载 woke_novel v2.0.1](https://github.com/keyboardgdy/woke_novel/releases/tag/v2.0.1)**
+>
+> 直接进入 Release 页面下载可运行程序；源码安装和开发说明见下方文档。
+
 <div align="center">
 
 <br/>

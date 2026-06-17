@@ -2,6 +2,12 @@
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
+> ## Download the App
+>
+> **Latest packaged program: [Download woke_novel v2.0.1](https://github.com/keyboardgdy/woke_novel/releases/tag/v2.0.1)**
+>
+> Use this release page to download the ready-to-run application package. Source-code setup instructions remain below for developers.
+
 Fully automated long-form novel generation workflow for Claude CLI or Codex CLI.
 
 ```

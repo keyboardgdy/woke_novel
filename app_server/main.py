@@ -137,6 +137,7 @@ class ProjectCreateRequest(BaseModel):
     option_count: int = Field(default=3, ge=1, le=10)
     auto_select_option: int = Field(default=1, ge=1, le=10)
     dry_run: bool = False
+    pause: bool = True
     start_immediately: bool = False
 
 
@@ -164,6 +165,7 @@ class RunRequest(BaseModel):
     option_count: int = Field(default=3, ge=1, le=10)
     auto_select_option: int = Field(default=1, ge=1, le=10)
     max_retries: int = Field(default=3, ge=1, le=20)
+    pause: bool = True
     user_description: str = ""
     novel_size: str | None = None
     target_word_count: int | None = None
@@ -226,6 +228,16 @@ class RunRecord:
 
 
 app = FastAPI(title="woke_novel visual console", version="0.1.0", default_response_class=Utf8JSONResponse)
+
+
+class NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: dict[str, Any]):
+        response = await super().get_response(path, scope)
+        if path in {"", ".", "index.html"} or path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -1050,6 +1062,7 @@ def command_for(project: str, mode: str, req: RunRequest) -> list[str]:
             "--novel-size", req.novel_size or read_project_info(project).get("novel_size") or ("Medium-length novel" if req.language == "en" else "中篇"),
             "--user-description", req.user_description or "",
         ]
+        cmd.append("--pause" if req.pause else "--no-pause")
     elif mode == "continue":
         cmd = base + [
             "continue",
@@ -1058,6 +1071,7 @@ def command_for(project: str, mode: str, req: RunRequest) -> list[str]:
             "--provider", req.provider,
             "--max-retries", str(req.max_retries),
         ]
+        cmd.append("--pause" if req.pause else "--no-pause")
     elif mode == "single":
         if not req.step:
             raise ApiError(400, "BAD_REQUEST", "single run requires step")
@@ -1143,9 +1157,24 @@ def check_command(name: str) -> dict[str, Any]:
         return {"available": False, "version": None, "path": None, "message": f"{name} not found in PATH"}
     try:
         if path.lower().endswith((".cmd", ".bat")):
-            result = subprocess.run(f'"{path}" --version', capture_output=True, text=True, timeout=5, shell=True)
+            result = subprocess.run(
+                f'"{path}" --version',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                shell=True,
+            )
         else:
-            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                [path, "--version"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
         version = (result.stdout or result.stderr).strip().splitlines()[0] if (result.stdout or result.stderr).strip() else None
     except Exception as exc:
         version = None
@@ -1274,6 +1303,7 @@ async def create_project(req: ProjectCreateRequest) -> dict[str, Any]:
         "novel_size": req.novel_size,
         "target_word_count": target_word_count,
         "user_description": req.user_description,
+        "dry_run": req.dry_run,
         "created_at": now_iso(),
         "current_round": 1,
         "selected_option": None,
@@ -1288,6 +1318,7 @@ async def create_project(req: ProjectCreateRequest) -> dict[str, Any]:
         "workflow_version": 2,
         "option_count": req.option_count,
         "auto_select_option": req.auto_select_option,
+        "pause": req.pause,
     }
     write_json(root / ".project_info.json", info)
     data: dict[str, Any] = {"project_name": req.project_name, "project_path": rel(root)}
@@ -1301,6 +1332,7 @@ async def create_project(req: ProjectCreateRequest) -> dict[str, Any]:
                 language=req.language,
                 provider=req.provider,
                 dry_run=req.dry_run,
+                pause=req.pause,
                 option_count=req.option_count,
                 auto_select_option=req.auto_select_option,
                 user_description=req.user_description,
@@ -1616,7 +1648,7 @@ def log_content(project: str, log_id: str, tail: int | None = None, q: str | Non
 
 
 if FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    app.mount("/", NoCacheStaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
 
 
 def main() -> None:

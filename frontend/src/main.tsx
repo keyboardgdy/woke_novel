@@ -257,7 +257,7 @@ const LINEAR_WORKFLOW_SECTIONS = [
   {
     key: "creative",
     name: "创意",
-    note: "候选方案与方案补充",
+    note: "候选方案、方案补充与方案确认",
     steps: [
       ["01", "创意方案"],
       ["02", "方案补充"]
@@ -274,34 +274,54 @@ const LINEAR_WORKFLOW_SECTIONS = [
   },
   {
     key: "axis",
-    name: "主轴",
-    note: "故事主轴、幕次与项目记忆",
+    name: "主轴/幕次",
+    note: "主轴、幕次框架、幕次骨架与吸引力重构",
     steps: [
       ["05", "故事主轴"],
+      ["Q7", "主轴评审"],
+      ["Q7R", "主轴重构"],
       ["05a", "幕次框架"],
+      ["Q8", "框架评审"],
+      ["Q8R", "框架重构"],
       ["05b", "幕次骨架"],
+      ["Q9", "骨架评审"],
+      ["Q9R", "骨架重构"],
       ["18", "项目记忆"]
     ]
   },
   {
     key: "opening",
     name: "开篇",
-    note: "首章剧情、指南、正文与状态",
+    note: "首章上下文、剧情增强、正文质检与状态",
     steps: [
+      ["Q10", "上下文包"],
       ["06", "剧情提取"],
       ["07", "开篇梗概"],
+      ["Q4", "剧情评审"],
+      ["Q5", "剧情重构"],
+      ["Q6", "钩子账本"],
       ["08", "写作指南"],
       ["09", "首章正文"],
+      ["Q1", "正文评审"],
+      ["Q2", "定向重写"],
+      ["Q3", "风格记忆"],
       ["10", "状态文档"]
     ]
   }
 ] as const;
 
 const LOOP_WORKFLOW_STEPS = [
+  ["Q10", "上下文包"],
   ["11", "方向指导"],
   ["12", "剧情梗概"],
+  ["Q4", "剧情评审"],
+  ["Q5", "剧情重构"],
+  ["Q6", "钩子账本"],
   ["13", "写作指南"],
   ["14", "正文创作"],
+  ["Q1", "正文评审"],
+  ["Q2", "定向重写"],
+  ["Q3", "风格记忆"],
   ["15", "状态文档"],
   ["16", "梗概精简"]
 ] as const;
@@ -747,6 +767,7 @@ function CreateProjectDialog({ existingProjects, onClose }: { existingProjects: 
     novel_size: "中篇",
     option_count: 3,
     dry_run: false,
+    pause: true,
     start_immediately: true,
     user_description: ""
   });
@@ -790,7 +811,7 @@ function CreateProjectDialog({ existingProjects, onClose }: { existingProjects: 
   const projectNameExists = existingProjects.some((name) => name.toLowerCase() === normalizedProjectName.toLowerCase());
   const selectedSize = NOVEL_SIZE_OPTIONS.find((item) => item.value === form.novel_size);
   const commandName = form.option_count > 1 ? "creative" : "loop";
-  const command = `python run_workflow.py ${commandName} --project-name ${form.project_name || "<project>"} --genre ${form.genre} --language ${form.language} --provider ${form.provider} --option-count ${form.option_count}${form.dry_run ? " --dry" : ""}`;
+  const command = `python run_workflow.py ${commandName} --project-name ${form.project_name || "<project>"} --genre ${form.genre} --language ${form.language} --provider ${form.provider} --option-count ${form.option_count} ${form.pause ? "--pause" : "--no-pause"}${form.dry_run ? " --dry" : ""}`;
   const selectGenre = (preset: GenrePreset) => {
     setSelectedPreset(preset);
     setForm({ ...form, genre: preset.genre_name, user_description: preset.description });
@@ -878,6 +899,13 @@ function CreateProjectDialog({ existingProjects, onClose }: { existingProjects: 
             <div className="form-grid">
               <label>后端<select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}><option value="claude">Claude CLI</option><option value="codex">Codex CLI</option></select></label>
               <label>创意方案数<input type="number" min={1} max={10} value={form.option_count} onChange={(e) => setForm({ ...form, option_count: Number(e.target.value) })} /></label>
+              <label>
+                运行模式
+                <select value={form.pause ? "author" : "auto"} onChange={(e) => setForm({ ...form, pause: e.target.value === "author" })}>
+                  <option value="author">作家模式 · 关键节点确认</option>
+                  <option value="auto">全自动模式 · 跳过确认</option>
+                </select>
+              </label>
               <div className="toggle-row full">
                 <label><input type="checkbox" checked={form.dry_run} onChange={(e) => setForm({ ...form, dry_run: e.target.checked })} /> 干运行</label>
                 <label><input type="checkbox" checked={form.start_immediately} onChange={(e) => setForm({ ...form, start_immediately: e.target.checked })} /> 创建后启动</label>
@@ -958,10 +986,18 @@ function WorkbenchPage({
     language: "zh",
     provider: "claude",
     dry_run: false,
+    pause: true,
     option_count: 3,
     auto_select_option: 1,
     max_retries: 3,
     user_description: ""
+  });
+  const continueRunBody = () => ({
+    language: fullRun.language,
+    provider: fullRun.provider,
+    dry_run: fullRun.dry_run,
+    pause: fullRun.pause,
+    max_retries: fullRun.max_retries
   });
   const runMutation = useMutation({
     mutationFn: ({ mode, body }: { mode: "creative" | "full" | "continue"; body: Record<string, unknown> }) => api<RunRecord>(`/projects/${project}/runs/${mode}`, { method: "POST", body: JSON.stringify(body) }),
@@ -1005,7 +1041,7 @@ function WorkbenchPage({
       queryClient.invalidateQueries({ queryKey: ["creative-options", project] });
       runMutation.mutate({
         mode: "continue",
-        body: { language: fullRun.language, provider: fullRun.provider, dry_run: fullRun.dry_run, max_retries: fullRun.max_retries }
+        body: continueRunBody()
       });
     }
   });
@@ -1017,6 +1053,7 @@ function WorkbenchPage({
       ...current,
       language: info.language || current.language,
       provider: info.provider || current.provider,
+      pause: typeof info.pause === "boolean" ? info.pause : current.pause,
       option_count: info.option_count || current.option_count,
       auto_select_option: info.auto_select_option || info.selected_option || current.auto_select_option,
       user_description: info.user_description || current.user_description
@@ -1168,13 +1205,21 @@ function WorkbenchPage({
   const runningStepLabel = currentStep?.step ? `${currentStep.step} ${currentStep.name || ""}`.trim() : `${runSourceLabel} 正在运行${workflow?.run_pid ? ` · PID ${workflow.run_pid}` : ""}`;
   const progressValue = chapterTotal ? Math.min(100, Math.round((generatedChapters / chapterTotal) * 100)) : 0;
   const parsedEvents = useMemo(() => parseLogEvents(lines), [lines]);
-  const stepOrder = useMemo(() => ["01", "02", "03", "04", "05", "05a", "05b", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"], []);
+  const stepOrder = useMemo(() => [
+    "01", "02", "03", "04",
+    "05", "Q7", "Q7R", "05a", "Q8", "Q8R", "05b", "Q9", "Q9R", "18",
+    "Q10", "06", "07", "Q4", "Q5", "Q6", "08", "09", "Q1", "Q2", "Q3", "10",
+    "11", "12", "13", "14", "15", "16", "17"
+  ], []);
   const lastStepIndex = info?.last_step ? stepOrder.indexOf(info.last_step) : -1;
   const currentStepCode = currentStep?.step || info?.last_step;
-  const statusForStep = (code: string): TimelineStepStatus => {
+  const completedByOrder = (code: string) => {
     const index = stepOrder.indexOf(code);
+    return index >= 0 && lastStepIndex >= index;
+  };
+  const statusForStep = (code: string): TimelineStepStatus => {
     if (projectRunning && currentStepCode === code) return "running";
-    if (index >= 0 && lastStepIndex >= index) return "succeeded";
+    if (completedByOrder(code)) return "succeeded";
     return "not_started";
   };
   const linearTimeline = LINEAR_WORKFLOW_SECTIONS.map((section) => {
@@ -1191,18 +1236,19 @@ function WorkbenchPage({
   const loopStepCodes = new Set(LOOP_WORKFLOW_STEPS.map(([code]) => code));
   const actEndStepCodes = new Set(ACT_END_WORKFLOW_STEPS.map(([code]) => code));
   const loopActive = Boolean(currentStepCode && (loopStepCodes.has(currentStepCode) || actEndStepCodes.has(currentStepCode)));
-  const loopStarted = lastStepIndex >= stepOrder.indexOf("11") || generatedChapters > 1;
+  const loopStarted = completedByOrder("11") || generatedChapters > 1;
   const loopComplete = Boolean(chapterTargetMet && generatedChapters > 0);
   const loopStatus: TimelineStepStatus = projectRunning && loopActive ? "running" : loopComplete ? "succeeded" : loopStarted ? "running" : "not_started";
   const loopTimelineSteps: TimelineStep[] = LOOP_WORKFLOW_STEPS.map(([code, name]) => ({
     code,
     name,
-    status: projectRunning && currentStepCode === code ? "running" : loopStarted ? "succeeded" : "not_started"
+    status: projectRunning && currentStepCode === code ? "running" : loopStarted && completedByOrder(code) ? "succeeded" : "not_started"
   }));
+  const actEndStarted = completedByOrder("17") || loopComplete;
   const actEndTimelineSteps: TimelineStep[] = ACT_END_WORKFLOW_STEPS.map(([code, name]) => ({
     code,
     name,
-    status: projectRunning && currentStepCode === code ? "running" : actEndStepCodes.has(info?.last_step || "") ? "succeeded" : "not_started"
+    status: projectRunning && currentStepCode === code ? "running" : actEndStarted && completedByOrder(code) ? "succeeded" : "not_started"
   }));
 
   if (!project) return <EmptyState title="未选择项目" />;
@@ -1217,7 +1263,7 @@ function WorkbenchPage({
         {(shouldShowCreativeStart || shouldShowContinue || projectRunning) ? (
           <div className="action-row">
             {shouldShowContinue ? (
-              <button className="primary-button" onClick={() => runMutation.mutate({ mode: "continue", body: { language: fullRun.language, provider: fullRun.provider, dry_run: fullRun.dry_run, max_retries: fullRun.max_retries } })} disabled={runMutation.isPending || projectRunning}>
+              <button className="primary-button" onClick={() => runMutation.mutate({ mode: "continue", body: continueRunBody() })} disabled={runMutation.isPending || projectRunning}>
                 {runMutation.isPending || projectRunning ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {projectRunning ? "运行中" : "继续生成"}
               </button>
             ) : null}
@@ -1340,7 +1386,7 @@ function WorkbenchPage({
           </div>
           <div className="task-actions">
             {shouldShowContinue ? (
-              <button className="secondary-button" onClick={() => runMutation.mutate({ mode: "continue", body: { language: fullRun.language, provider: fullRun.provider, dry_run: fullRun.dry_run, max_retries: fullRun.max_retries } })} disabled={runMutation.isPending || projectRunning}>
+              <button className="secondary-button" onClick={() => runMutation.mutate({ mode: "continue", body: continueRunBody() })} disabled={runMutation.isPending || projectRunning}>
                 {projectRunning ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />} {projectRunning ? "运行中" : "继续生成"}
               </button>
             ) : null}
@@ -1362,6 +1408,7 @@ function WorkbenchPage({
               <div><span>后端</span><strong>{info?.provider || "claude"}</strong></div>
               <div><span>创意方案数</span><strong>{info?.option_count || fullRun.option_count}</strong></div>
               <div><span>自动选择</span><strong>{info?.auto_select_option || info?.selected_option || "未设置"}</strong></div>
+              <div><span>运行模式</span><strong>{(typeof info?.pause === "boolean" ? info.pause : fullRun.pause) ? "作家模式" : "全自动模式"}</strong></div>
               <div><span>干运行</span><strong>{info?.dry_run ? "是" : "否"}</strong></div>
               <div><span>创建后启动</span><strong>{info?.last_step ? "已启动" : "待启动"}</strong></div>
               <div className="wide"><span>补充说明</span><strong>{info?.user_description || "未填写"}</strong></div>
@@ -1377,7 +1424,7 @@ function WorkbenchPage({
               <span>当前章节进度</span>
               <div><i style={{ width: `${progressValue}%` }} /></div>
             </div>
-            <button className="primary-button wide-button" onClick={() => runMutation.mutate({ mode: "continue", body: { language: fullRun.language, provider: fullRun.provider, dry_run: fullRun.dry_run, max_retries: fullRun.max_retries } })} disabled={runMutation.isPending || projectRunning}>
+            <button className="primary-button wide-button" onClick={() => runMutation.mutate({ mode: "continue", body: continueRunBody() })} disabled={runMutation.isPending || projectRunning}>
               {runMutation.isPending || projectRunning ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {projectRunning ? "运行中，暂不可操作" : "继续生成"}
             </button>
           </section>

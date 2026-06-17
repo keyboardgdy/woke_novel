@@ -126,6 +126,10 @@ def _has_configured_language(config: Dict[str, Any]) -> bool:
     return isinstance(value, str) and value.strip().lower() in SUPPORTED_LANGUAGES
 
 
+def _has_configured_pause_mode(config: Dict[str, Any]) -> bool:
+    return isinstance(config.get("pause_mode"), bool)
+
+
 def _load_configured_pause_mode() -> bool:
     return _normalize_pause_mode(_load_menu_config().get("pause_mode"))
 
@@ -139,6 +143,152 @@ def _save_configured_pause_mode(pause_mode: bool) -> bool:
 def _provider_label(provider: Optional[str] = None) -> str:
     value = (provider or _current_provider or "claude").lower()
     return "Codex CLI" if value == "codex" else "Claude CLI"
+
+
+def _command_status(command: str) -> Dict[str, Any]:
+    """Return PATH/version status for a model CLI command."""
+    path = shutil.which(command)
+    if not path:
+        return {"available": False, "path": None, "version": None, "message": f"{command} not found in PATH"}
+
+    try:
+        if path.lower().endswith((".cmd", ".bat")):
+            result = subprocess.run(
+                f'"{path}" --version',
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                shell=True,
+            )
+        else:
+            result = subprocess.run(
+                [path, "--version"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+        output = (result.stdout or result.stderr).strip()
+        version = output.splitlines()[0] if output else None
+    except Exception as exc:
+        return {"available": True, "path": path, "version": None, "message": str(exc)}
+
+    return {"available": True, "path": path, "version": version, "message": None}
+
+
+def _provider_install_help(provider: str) -> str:
+    if provider == "codex":
+        if _current_language == "en":
+            return (
+                "Install Codex CLI:\n"
+                "  npm install -g @openai/codex\n"
+                "  codex --version\n"
+                "  codex\n\n"
+                "If your installation method differs, follow the official OpenAI Codex CLI setup guide, then make sure `codex` is available in PATH."
+            )
+        return (
+            "安装 Codex CLI：\n"
+            "  npm install -g @openai/codex\n"
+            "  codex --version\n"
+            "  codex\n\n"
+            "如果你使用其他安装方式，请按 OpenAI Codex CLI 官方说明配置，并确认 `codex` 已加入 PATH。"
+        )
+
+    if _current_language == "en":
+        return (
+            "Install Claude Code CLI:\n"
+            "  npm install -g @anthropic-ai/claude-code\n"
+            "  claude --version\n"
+            "  claude\n\n"
+            "Official setup guide: https://docs.anthropic.com/en/docs/claude-code/setup"
+        )
+    return (
+        "安装 Claude Code CLI：\n"
+        "  npm install -g @anthropic-ai/claude-code\n"
+        "  claude --version\n"
+        "  claude\n\n"
+        "官方安装说明：https://docs.anthropic.com/en/docs/claude-code/setup"
+    )
+
+
+def _show_model_cli_environment_check(selected_provider: Optional[str] = None) -> bool:
+    """Show startup environment status and install guidance for Claude/Codex CLI."""
+    selected = _normalize_provider(selected_provider or _current_provider)
+    statuses = {
+        "claude": _command_status("claude"),
+        "codex": _command_status("codex"),
+    }
+
+    def status_line(command: str) -> str:
+        status = statuses[command]
+        label = "Claude CLI" if command == "claude" else "Codex CLI"
+        if status["available"]:
+            detail = status["version"] or status["path"] or "available"
+            return f"{label}: OK - {detail}"
+        return f"{label}: MISSING - {status['message']}"
+
+    selected_status = statuses[selected]
+    any_available = any(status["available"] for status in statuses.values())
+    if _current_language == "en":
+        title = "Environment Check"
+        selected_name = _provider_label(selected)
+        summary = (
+            f"Selected backend: {selected_name}\n"
+            f"{status_line('claude')}\n"
+            f"{status_line('codex')}"
+        )
+        if selected_status["available"]:
+            body = summary + "\n\nThe selected backend is ready."
+            color = C.SUCCESS
+        elif any_available:
+            body = (
+                summary
+                + f"\n\nThe selected backend is not installed or not in PATH. You can switch to an installed backend in Settings, or install {selected_name}:\n\n"
+                + _provider_install_help(selected)
+            )
+            color = C.WARNING
+        else:
+            body = (
+                summary
+                + "\n\nNo supported model CLI was found. Install at least one backend before running real workflows:\n\n"
+                + _provider_install_help("claude")
+                + "\n\n"
+                + _provider_install_help("codex")
+            )
+            color = C.ERROR
+    else:
+        title = "环境检查"
+        selected_name = _provider_label(selected)
+        summary = (
+            f"当前选择：{selected_name}\n"
+            f"{status_line('claude')}\n"
+            f"{status_line('codex')}"
+        )
+        if selected_status["available"]:
+            body = summary + "\n\n已选后端可用。"
+            color = C.SUCCESS
+        elif any_available:
+            body = (
+                summary
+                + f"\n\n已选后端未安装或未加入 PATH。你可以在系统设置里切换到已安装后端，或安装 {selected_name}：\n\n"
+                + _provider_install_help(selected)
+            )
+            color = C.WARNING
+        else:
+            body = (
+                summary
+                + "\n\n未检测到可用的模型 CLI。真实运行工作流前，请至少安装 Claude CLI 或 Codex CLI 其中一种：\n\n"
+                + _provider_install_help("claude")
+                + "\n\n"
+                + _provider_install_help("codex")
+            )
+            color = C.ERROR
+
+    print_panel(title, body, color=color, icon=I.WARN if color != C.SUCCESS else I.OK)
+    return bool(selected_status["available"])
 
 
 def _language_label(language: Optional[str] = None) -> str:
@@ -701,6 +851,7 @@ def settings_mode() -> None:
         _current_provider = selected_provider
         if _save_configured_provider(_current_provider):
             success(t("settings.provider_changed", provider=_provider_label()))
+        _show_model_cli_environment_check(_current_provider)
         press_enter()
         return
 
@@ -1107,6 +1258,7 @@ def main() -> None:
     config = _load_menu_config()
     has_language = _has_configured_language(config)
     has_provider = _has_configured_provider(config)
+    has_pause_mode = _has_configured_pause_mode(config)
     _current_language = _normalize_language(config.get("language"))
     i18n_module.set_language(_current_language)
     _current_provider = _normalize_provider(config.get("provider"))
@@ -1124,10 +1276,15 @@ def main() -> None:
         _current_provider = choose_provider(_current_provider)
         config["provider"] = _current_provider
 
+    if not has_pause_mode:
+        _current_pause_mode = choose_pause_mode(_current_pause_mode)
+
     config["pause_mode"] = _current_pause_mode
 
-    if not has_language or not has_provider:
+    if not has_language or not has_provider or not has_pause_mode:
         _save_menu_config(config)
+        _show_model_cli_environment_check(_current_provider)
+        press_enter()
 
     while True:
         clear()

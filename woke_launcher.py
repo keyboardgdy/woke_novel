@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.request
 import webbrowser
+import re
 
 from app_paths import runtime_path
 
@@ -18,6 +19,7 @@ URL = "http://127.0.0.1:8787"
 HEALTH_URL = f"{URL}/api/v1/health"
 LOG_FILE = ROOT / "logs" / "woke_launcher.log"
 SERVER_LOG_FILE = ROOT / "logs" / "woke_server.log"
+ASSET_RE = re.compile(r'/assets/[^"\']+\.js')
 
 
 def log(message: str) -> None:
@@ -35,6 +37,58 @@ def service_ready() -> bool:
             return response.status == 200
     except Exception:
         return False
+
+
+def fetch_text(url: str, timeout: float = 1.5) -> str:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        log(f"fetch failed url={url}: {exc}")
+        return ""
+
+
+def frontend_entry_assets(html: str) -> set[str]:
+    return set(ASSET_RE.findall(html or ""))
+
+
+def frontend_assets_match() -> bool:
+    dist = ROOT / "frontend" / "dist" / "index.html"
+    try:
+        disk_html = dist.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        log(f"read dist index failed: {exc}")
+        return True
+    disk_assets = frontend_entry_assets(disk_html)
+    served_assets = frontend_entry_assets(fetch_text(URL))
+    if not disk_assets or not served_assets:
+        return True
+    match = disk_assets == served_assets
+    if not match:
+        log(f"frontend asset mismatch served={sorted(served_assets)} disk={sorted(disk_assets)}")
+    return match
+
+
+def stop_existing_server() -> bool:
+    if not sys.platform.startswith("win"):
+        return False
+    ps = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        "$targets = Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8787 -State Listen | "
+        "Select-Object -ExpandProperty OwningProcess;"
+        "$targets = $targets | Where-Object { $_ } | Sort-Object -Unique;"
+        "foreach ($pidToStop in $targets) { taskkill /PID $pidToStop /T /F | Out-Null };"
+        "if ($targets) { exit 0 } else { exit 1 }"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    log(f"stop existing server returncode={result.returncode}")
+    time.sleep(0.5)
+    return result.returncode == 0
 
 
 def start_server() -> subprocess.Popen[str]:
@@ -71,6 +125,10 @@ def main() -> int:
         print(message, file=sys.stderr)
         return 1
 
+    if service_ready() and not frontend_assets_match():
+        log("backend already running with stale frontend assets; restarting")
+        stop_existing_server()
+
     if not service_ready():
         log("starting backend")
         process = start_server()
@@ -86,8 +144,9 @@ def main() -> int:
     else:
         log("backend already running")
 
-    log(f"opening {URL}")
-    webbrowser.open(URL)
+    open_url = f"{URL}/?v={int(time.time())}"
+    log(f"opening {open_url}")
+    webbrowser.open(open_url)
     return 0
 
 

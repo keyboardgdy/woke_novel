@@ -166,7 +166,12 @@ class ProjectInfo:
             self._data.pop("last_step_phase", None)
         if act_num is not None:
             self._data["last_step_act"] = act_num
-        elif step not in {"05b", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"}:
+        elif step not in {
+            "05b", "Q9", "Q9R", "Q10",
+            "06", "07", "08", "09", "10",
+            "11", "12", "13", "14", "15", "16", "17", "18",
+            "Q1", "Q2", "Q3", "Q4", "Q5", "Q6",
+        }:
             self._data.pop("last_step_act", None)
         if option_index is not None:
             self._data["last_step_option_index"] = option_index

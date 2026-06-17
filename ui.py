@@ -615,10 +615,49 @@ def confirm(message: str, default: bool = True) -> bool:
         return default
 
 
+def _interactive_prompt(
+    message: str,
+    default: Optional[str] = None,
+    show_default: bool = True,
+    preface: Optional[str] = None,
+    allow_escape: bool = False,
+) -> Optional[str]:
+    if preface:
+        _console.print(f"{indent()}{preface}", style=C.DIM)
+
+    suffix = f" ({default})" if default is not None and show_default else ""
+    _console.print(f"  {I.ARROW} {message}{suffix}: ", end="", style=f"bold {C.PRIMARY}")
+    chars: List[str] = []
+
+    with _raw_terminal():
+        while True:
+            key = _read_key()
+            if key.name == "ctrl_c":
+                raise KeyboardInterrupt
+            if key.name == "escape" and allow_escape:
+                _console.print()
+                return None
+            if key.name == "enter":
+                _console.print()
+                value = "".join(chars).strip()
+                return value if value else (default or "")
+            if key.name == "backspace":
+                if chars:
+                    chars.pop()
+                    _console.file.write("\b \b")
+                    _console.file.flush()
+                continue
+            if key.name == "char" and key.value:
+                chars.append(key.value)
+                _console.file.write(key.value)
+                _console.file.flush()
+
+
 def prompt(message: str, default: Optional[str] = None,
           validator: Optional[Callable[[str], bool]] = None,
           show_default: bool = True,
-          preface: Optional[str] = None) -> str:
+          preface: Optional[str] = None,
+          allow_escape: bool = False) -> Optional[str]:
     """文本输入（可选默认值 + 校验器）。
 
     - 默认值的回显由 rich.Prompt.ask 负责（自动在括号里展示），本函数不重复拼 [default]，
@@ -629,14 +668,25 @@ def prompt(message: str, default: Optional[str] = None,
     """
     while True:
         try:
-            if preface:
-                _console.print(f"{indent()}{preface}", style=C.DIM)
-            value = Prompt.ask(
-                f"  {I.ARROW} {message}",
-                console=_console,
-                default=default,
-                show_default=show_default,
-            )
+            if allow_escape and _can_use_interactive_select():
+                value = _interactive_prompt(
+                    message,
+                    default=default,
+                    show_default=show_default,
+                    preface=preface,
+                    allow_escape=allow_escape,
+                )
+                if value is None:
+                    return None
+            else:
+                if preface:
+                    _console.print(f"{indent()}{preface}", style=C.DIM)
+                value = Prompt.ask(
+                    f"  {I.ARROW} {message}",
+                    console=_console,
+                    default=default,
+                    show_default=show_default,
+                )
         except EOFError:
             value = default or ""
         value = (value or "").strip()
@@ -644,6 +694,35 @@ def prompt(message: str, default: Optional[str] = None,
             warn(tr("ui.input_invalid", message=message))
             continue
         return value
+
+
+def prompt_multiline(message: str, default: Optional[str] = None,
+                     end_marker: str = "/done",
+                     preface: Optional[str] = None) -> str:
+    """Multiline text input. Finish with ``end_marker`` on its own line."""
+    try:
+        if preface:
+            _console.print(f"{indent()}{preface}", style=C.DIM)
+        _console.print(f"  {I.ARROW} {message}", style=f"bold {C.PRIMARY}")
+        _console.print(
+            f"{indent()}{tr('ui.multiline_hint', marker=end_marker)}",
+            style=C.DIM,
+        )
+        lines: List[str] = []
+        while True:
+            try:
+                line_value = input()
+            except EOFError:
+                break
+            if not lines and line_value == "":
+                return default or ""
+            if line_value.strip() == end_marker:
+                break
+            lines.append(line_value)
+        value = "\n".join(lines).strip()
+        return value if value else (default or "")
+    except EOFError:
+        return default or ""
 
 
 def _prompt_select(message: str, options: Sequence[str], default: int = 0) -> int:
@@ -673,13 +752,18 @@ def _prompt_select(message: str, options: Sequence[str], default: int = 0) -> in
         warn(tr("common.invalid_choice_retry"))
 
 
-def _interactive_select(message: str, options: Sequence[str], default: int = 0) -> int:
+def _interactive_select(
+    message: str,
+    options: Sequence[str],
+    default: int = 0,
+    allow_escape: bool = False,
+) -> Optional[int]:
     selected = max(0, min(default, len(options) - 1))
     typed = ""
 
     with _raw_terminal():
         with Live(
-            _renderable_select_menu(message, options, selected, typed),
+            _renderable_select_menu(message, options, selected, typed, allow_escape=allow_escape),
             console=_console,
             refresh_per_second=20,
             transient=False,
@@ -689,6 +773,8 @@ def _interactive_select(message: str, options: Sequence[str], default: int = 0) 
                 if key.name == "ctrl_c":
                     raise KeyboardInterrupt
                 if key.name == "escape":
+                    if allow_escape:
+                        return None
                     typed = ""
                 elif key.name == "up":
                     selected = (selected - 1) % len(options)
@@ -720,10 +806,16 @@ def _interactive_select(message: str, options: Sequence[str], default: int = 0) 
                         typed = key.value
                     if typed and 1 <= int(typed) <= len(options):
                         selected = int(typed) - 1
-                live.update(_renderable_select_menu(message, options, selected, typed))
+                live.update(_renderable_select_menu(message, options, selected, typed, allow_escape=allow_escape))
 
 
-def _renderable_select_menu(message: str, options: Sequence[str], selected: int, typed: str = "") -> Text:
+def _renderable_select_menu(
+    message: str,
+    options: Sequence[str],
+    selected: int,
+    typed: str = "",
+    allow_escape: bool = False,
+) -> Text:
     text = Text()
     text.append("\n")
     text.append(f"  {I.ARROW} {message}\n", style=f"bold {C.PRIMARY}")
@@ -733,20 +825,27 @@ def _renderable_select_menu(message: str, options: Sequence[str], selected: int,
         style = f"bold {C.PRIMARY}" if is_selected else C.MUTED
         text.append(f"     {marker}{i}. {opt}\n", style=style)
     hint = "↑/↓ Enter"
+    if allow_escape:
+        hint = f"{hint} Esc返回主菜单"
     if typed:
         hint = f"{hint} · {tr('common.select_input')}: {typed}"
     text.append(f"  {I.ARROW} {hint}", style=C.DIM)
     return text
 
 
-def select(message: str, options: Sequence[str], default: int = 0) -> int:
+def select(
+    message: str,
+    options: Sequence[str],
+    default: int = 0,
+    allow_escape: bool = False,
+) -> Optional[int]:
     """单选菜单。交互式终端支持上下箭头；非交互环境回退到数字选择。"""
     if not options:
         raise ValueError("select() requires at least one option")
     default = max(0, min(default, len(options) - 1))
     if _can_use_interactive_select():
         try:
-            return _interactive_select(message, options, default)
+            return _interactive_select(message, options, default, allow_escape=allow_escape)
         except (EOFError, ImportError, OSError, ValueError):
             pass
     return _prompt_select(message, options, default)
@@ -760,7 +859,9 @@ def select_project(projects: Sequence[Dict[str, Any]], allow_new: bool = True) -
         options.append(Text(tr("project.create_new_option"), style=f"bold {C.ACCENT}").plain)
     if not options:
         return None
-    idx = select(tr("project.select_prompt"), options)
+    idx = select(tr("project.select_prompt"), options, allow_escape=True)
+    if idx is None:
+        return None
     if allow_new and idx == len(projects):
         return "__new__"
     return projects[idx].get("name")
@@ -865,6 +966,6 @@ __all__ = [
     "print_projects_table", "print_choices_table",
     "success", "warn", "error", "info", "dim", "debug", "note",
     "step_header", "step_result", "format_elapsed", "spinner",
-    "confirm", "prompt", "select", "select_project", "select_projects",
+    "confirm", "prompt", "prompt_multiline", "select", "select_project", "select_projects",
     "print_done", "press_enter", "pause",
 ]

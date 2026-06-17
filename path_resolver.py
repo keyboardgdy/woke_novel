@@ -5,15 +5,17 @@ from pathlib import Path
 from typing import Dict, Optional
 import re
 
+from app_paths import resource_path, runtime_path
+
 # 项目根目录
-PROJECTS_ROOT = Path(__file__).resolve().parent / "projects"
+PROJECTS_ROOT = runtime_path("projects")
 
 # 日志根目录（与 projects/ 平级，每个小说一个子目录）
-LOGS_ROOT = Path(__file__).resolve().parent / "logs"
+LOGS_ROOT = runtime_path("logs")
 
 # 规则文件根目录（相对于当前脚本目录）
-RULES_ROOT = Path(__file__).parent / "steps"
-RULES_ROOT_EN = Path(__file__).parent / "steps_en"
+RULES_ROOT = resource_path("steps")
+RULES_ROOT_EN = resource_path("steps_en")
 
 
 # 步骤到文件的映射
@@ -38,6 +40,19 @@ STEP_FILE_MAP = {
     "16": "16 故事梗概精简.md",
     "17": "17 幕次故事梗概精简.md",
     "18": "18 项目级 CLAUDE.md.md",
+    "Q1": "tools/Q1 章节质量评审.md",
+    "Q2": "tools/Q2 章节定向重写.md",
+    "Q3": "tools/Q3 风格记忆沉淀.md",
+    "Q4": "tools/Q4 剧情吸引力评审.md",
+    "Q5": "tools/Q5 剧情强化重构.md",
+    "Q6": "tools/Q6 剧情钩子账本沉淀.md",
+    "Q7": "tools/Q7 故事主轴吸引力评审.md",
+    "Q7R": "tools/Q7R 故事主轴吸引力重构.md",
+    "Q8": "tools/Q8 幕次框架吸引力评审.md",
+    "Q8R": "tools/Q8R 幕次框架吸引力重构.md",
+    "Q9": "tools/Q9 幕次核心骨架吸引力评审.md",
+    "Q9R": "tools/Q9R 幕次核心骨架吸引力重构.md",
+    "Q10": "tools/Q10 章节上下文包生成.md",
 }
 
 STEP_FILE_MAP_EN = {
@@ -61,6 +76,19 @@ STEP_FILE_MAP_EN = {
     "16": "16 Story Summary Compression.md",
     "17": "17 Act-Level Story Summary Compression.md",
     "18": "18 Project-Level CLAUDE.md.md",
+    "Q1": "tools/Q1 Chapter Quality Review.md",
+    "Q2": "tools/Q2 Targeted Chapter Rewrite.md",
+    "Q3": "tools/Q3 Style Memory Update.md",
+    "Q4": "tools/Q4 Plot Appeal Review.md",
+    "Q5": "tools/Q5 Plot Appeal Rewrite.md",
+    "Q6": "tools/Q6 Plot Hook Ledger Update.md",
+    "Q7": "tools/Q7 Story Axis Appeal Review.md",
+    "Q7R": "tools/Q7R Story Axis Appeal Rewrite.md",
+    "Q8": "tools/Q8 Act Framework Appeal Review.md",
+    "Q8R": "tools/Q8R Act Framework Appeal Rewrite.md",
+    "Q9": "tools/Q9 Act Skeleton Appeal Review.md",
+    "Q9R": "tools/Q9R Act Skeleton Appeal Rewrite.md",
+    "Q10": "tools/Q10 Chapter Context Pack.md",
 }
 
 
@@ -86,10 +114,11 @@ class PathResolver:
         self.output_dir = self.project_root / "02_output"
         self.state_dir = self.project_root / "03_state"
         self.characters_dir = self.project_root / "04_characters"
+        self.quality_dir = self.project_root / "05_quality"
 
         # 确保目录存在
         for d in [self.baseline_dir, self.plots_dir, self.guides_dir, self.output_dir,
-                 self.state_dir, self.characters_dir]:
+                 self.state_dir, self.characters_dir, self.quality_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
     def resolve(self, template: str, round_num: int = 1, option_index: int = None,
@@ -136,16 +165,28 @@ class PathResolver:
             current_skeleton_name = f"Core_Skeleton_{act_num or 1}.md"
             read_prefix = "Read"
             prev_note = "previous act core skeleton, for continuity reference only"
+            prev_quality_review_name = f"Act_Skeleton_Appeal_Review_{act_num - 1}.md" if act_num is not None else "Act_Skeleton_Appeal_Review_1.md"
+            prev_quality_rewrite_name = f"Act_Skeleton_Rewrite_Notes_{act_num - 1}.md" if act_num is not None else "Act_Skeleton_Rewrite_Notes_1.md"
+            prev_quality_note = "previous act appeal gate, for continuity reference only"
         else:
             prev_skeleton_name = f"核心骨架_{act_num - 1}.md" if act_num is not None else "核心骨架_1.md"
             current_skeleton_name = f"核心骨架_{act_num or 1}.md"
             read_prefix = "读取"
             prev_note = "上一幕核心骨架,仅作为连贯性参考"
+            prev_quality_review_name = f"核心骨架吸引力评审_{act_num - 1}.md" if act_num is not None else "核心骨架吸引力评审_1.md"
+            prev_quality_rewrite_name = f"核心骨架重构说明_{act_num - 1}.md" if act_num is not None else "核心骨架重构说明_1.md"
+            prev_quality_note = "上一幕吸引力门禁,仅作为连贯性参考"
         if act_num is not None and act_num > 1:
             result = result.replace("{prev_act_skeleton}", f"{read_prefix}: {p}/00_baseline/{prev_skeleton_name} ({prev_note})")
+            result = result.replace(
+                "{prev_act_quality}",
+                f"{read_prefix}: {p}/05_quality/{prev_quality_review_name} ({prev_quality_note})\n"
+                f"{read_prefix}: {p}/05_quality/{prev_quality_rewrite_name} ({prev_quality_note})"
+            )
             result = result.replace("{act_skeleton}", f"{read_prefix}: {p}/00_baseline/{current_skeleton_name}")
         else:
             result = result.replace("{prev_act_skeleton}", "")
+            result = result.replace("{prev_act_quality}", "")
             result = result.replace("{act_skeleton}", f"{read_prefix}: {p}/00_baseline/{current_skeleton_name}")
         if ref_works is not None:
             result = result.replace("{ref_works}", ref_works)
@@ -182,6 +223,10 @@ class PathResolver:
 
         # ========== 01_plots 目录 ==========
         result = result.replace("{plots}", p + "/01_plots")
+        if self.language == "en":
+            result = result.replace("{chapter_context}", p + f"/01_plots/Chapter_Context_Pack_v{r}.md")
+        else:
+            result = result.replace("{chapter_context}", p + f"/01_plots/章节上下文包v{r}.md")
 
         # ========== 02_guides 目录 ==========
         result = result.replace("{guides}", p + "/02_guides")
@@ -191,6 +236,9 @@ class PathResolver:
 
         # ========== 03_state 目录 ==========
         result = result.replace("{state}", p + "/03_state")
+
+        # ========== 05_quality 目录 ==========
+        result = result.replace("{quality}", p + "/05_quality")
 
         return result
 

@@ -1,32 +1,24 @@
 Read: `{plots}/Plot_v{round}.md`
 
-Read: `{baseline}/Story_Axis.md`
-
-Read: `{baseline}/Act_Framework.md`
-
-Read: `{baseline}/Core_Skeleton_{act_num}.md`
-
-Read: `{baseline}/Worldbuilding.md`
-
-Read: `{chars}/Character_Profiles.json`
-
-Read: `{chars}/Relationship_Matrix.json`
+Read: `{chapter_context}`
 
 Design and generate a writing guide that will instruct the AI to produce the novel prose.
 
 ## Design Principles
 
 1. The guide must not repeat the plot. The plot is provided by the plot file. The guide only gives execution-level instructions.
-2. Every instruction must be executable. After reading it, the AI should know exactly what to write and what not to write, rather than receiving vague direction.
+2. Every instruction must be executable. After reading it, the AI should know exactly what to write and what not to write, rather than receiving vague direction with room for interpretation.
 3. Use fingerprints for style, not labels. Do not say "classical and elegant"; give concrete scales for sentence length, vocabulary, and rhetorical density.
-4. Use texture for emotion, not category. Do not say "heavy and oppressive"; write "controlled heat," "slow cold," or "an anxiety lodged in the bones."
+4. Use texture for emotion, not category. Do not say "heavy and oppressive"; write "controlled heat," "slow cold," or "anxiety lodged in the bones."
 5. Taboos must be targeted, not generic. They should address the typical AI degradation modes of this particular story, not general writing advice.
 
 ## Output Requirements
 
 - Prioritize quality, not length.
-- Instructions must be concrete enough to write from directly.
-- Prohibitions must be customized based on this story's genre, characters, and style.
+- This chapter's prose target: 2500–4500 characters, default around 3000 characters; if the core skeleton or plot file gives a more specific chapter length arrangement, that must be inherited.
+- Keep the guide itself concise, around 1500–2200 characters, hard cap 2800 characters; do not expand it into a plot retelling or an essay on craft.
+- Instructions must be concrete enough to write from directly. Do not leave room for ambiguity.
+- Prohibitions must be customized based on this story's genre, characters, and style traits.
 - Strictly use the chapter structure below.
 
 Write to: `{guides}/Writing_Guide_v{round}.md`
@@ -68,7 +60,7 @@ Write to: `{guides}/Writing_Guide_v{round}.md`
 
 ### 2.3 Rhetorical Density
 
-- Number of rhetorical events per thousand words, such as metaphor, synesthesia, personification.
+- Number of rhetorical events per thousand characters, such as metaphor, synesthesia, personification.
 - Preferred rhetorical type: imagistic, contrastive, sensory, philosophical.
 - Any special rhetoric: repetition, silence, fragmentation, stream-of-consciousness fragments.
 
@@ -85,13 +77,20 @@ Write to: `{guides}/Writing_Guide_v{round}.md`
 
 - Speech style: sentence endings, word preferences, tempo, whether the character often stops before saying the real thing.
 - Behavioral traits: signature small actions, attitude toward specific objects, body-language patterns.
-- Psychological state in this section. Write something like "He weighs two choices repeatedly, but when he speaks, he chooses a third," not "He is conflicted."
+- Psychological state in this section. Write something like "He weighs two choices repeatedly, but when he speaks, he chooses a third" — not "He is conflicted."
 
 ### 3.2 Relationship Dynamics
 
 - The current substance of the relationship: whether the surface and inner layer match.
 - Whether the relationship advances, freezes, or retreats in this section.
 - The triggering event of the relationship change and the state after the trigger.
+- The relationship debt carried over or newly added in this section: owing / accidental hurt / being seen / being chosen / being left behind / being protected.
+- The masculine or feminine sexual attraction to be highlighted in this section: strength / softness / ease / danger / restraint / maturity / wildness / vulnerability / contrast.
+- The specific details the attracted party notices: posture / voice / clothing / scent / rhythm of movement / body temperature / skin state / muscle response / gaze lingering.
+- The intimacy boundary in this section: what is allowed, what is not, why it cannot be crossed.
+- The abstract intimate acts appropriate for this section (the action must be concrete and serve the character relationship).
+- Whether real sexual intimacy is allowed in this section; if allowed, specify consent conditions, narrative scale, and relationship consequences afterward.
+- Defensive response after intimacy: pulling back / joking / cold face / changing the subject / turning the tables / silence / asking for confirmation / pretending nothing happened.
 
 ### 3.3 Supporting Character Scale
 
@@ -124,6 +123,30 @@ Write to: `{guides}/Writing_Guide_v{round}.md`
 - Ending state: the character's emotion on exit.
 - Delayed release point: where the emotion is intentionally held back for a later section.
 
+### 4.3a Intimacy-Tension Execution
+
+- If this section contains a charged atmosphere between men and women, it must be conveyed through abstract intimate acts such as distance, before and after touch, care, clothing, wounds, temperature, scent, gaze lingering, and shared silence.
+- Every intimate moment must contain three steps: the reason for approaching, the boundary that stops them, and the reaction afterward.
+- An intimate moment must do more than merely make the atmosphere charged; it must change at least one of: initiative, trust, defense, debt, misunderstanding, or dependence.
+- Do not directly use words like "ambiguous," "heart-stirring," "desire," "flutter," or "feelings growing in secret" to replace what the reader should actually feel.
+
+### 4.3a-1 Sexual Attraction Description
+
+- It is allowed and encouraged to describe the sexual attraction of an adult male or adult female, but it must be conveyed through the shift of attention inside the character's viewpoint: what he or she saw, what he or she heard, what he or she smelled, why the gaze immediately looked away or, on the contrary, lingered.
+- Attraction can come from body lines, a sense of strength, a sense of softness, clothing clinging to the body, a lowered voice, a change in breathing, wet hair, wounds, sweat, scent, a sense of controlled movement, a relaxed posture, danger, restraint, or contrast.
+- Describe the attracted party's physical response: speaking less, throat tightening, movements slowing by a beat, gaze averting then returning, suddenly sharpness, over-arranging objects, only realizing the distance after getting closer.
+- Do not scan the entire body evenly within the same paragraph. Pick 1–3 of the most narratively functional attraction details and let them change the dialogue, the action, or the relationship initiative.
+- Do not rely only on "beautiful, handsome, sexy, alluring, hot." These words may appear occasionally, but they cannot replace concrete observation.
+- Do not break the character into a checklist of body parts. Attraction description must preserve personality, situation, agency, and the boundaries of the person being observed.
+
+### 4.3b Sexual Intimacy Execution
+
+- If the plot file judges that this section allows sexual intimacy to actually occur, the prose must not use a mechanical jump-cut to evade the fact; it may state plainly that the two have had sexual intimacy.
+- Sexual intimacy must include: both parties adult, sober, willing. Consent can be implicit, but it must be recognizable to the reader, and any hesitation, pause, or refusal must be respected.
+- Place descriptive focus on choice, approaching, pauses, breathing, bodily aftershock, shame, defense, confirmation, post-act silence, and relationship change. Do not write it as a checklist of organs, postures, steps, or techniques.
+- Sexual intimacy must change at least one of the following: trust, dependence, power dynamics, debt, misunderstanding, self-perception, or subsequent risk.
+- An undetailed occurrence can be written, but the text must not pretend nothing happened; a trackable state must be left behind afterward.
+
 ### 4.4 Foreshadowing and Payoff
 
 - Cite foreshadowing IDs already marked in the plot file and identify which are paid off here.
@@ -142,8 +165,10 @@ Write to: `{guides}/Writing_Guide_v{round}.md`
 
 ### 5.1 Length and Structure
 
-- Word-count range, with upper and lower limits.
-- Number of internal beats and approximate word-count ratio for each beat.
+- Target character-count range for the prose: write the upper and lower limits clearly, default 2500–4500 characters; do not use vague terms like "moderate" or "rather long."
+- Keep internal beats to 3–5, and write the approximate character-count proportion for each.
+- Each beat must be labeled "must write / compressible / deletable" so that when the prose runs over the character count, the generation step can preferentially trim it.
+- If the plot information is too dense, preferentially compress exposition, setup, repeated psychology, and non-critical environmental description. Do not compress core turns, relationship change, or chapter landing points.
 
 ### 5.2 Paragraph Types and Rhythm Allocation
 
@@ -215,6 +240,11 @@ Forbidden:
 - Sudden character-position reversal
 - Sacrificing logic for payoff
 - Lowering character intelligence to advance the plot
+- Using risqué labels, blunt psychological summaries, or mechanical description in place of a charged atmosphere
+- Using empty labels such as "very beautiful / very handsome / very sexy" to replace the concrete attraction of a male or female character
+- Writing attraction description as a full-body scan, a checklist of body parts, or as a gaze unrelated to the character's situation
+- Letting intimate acts have no cost, no boundary, and no follow-up reaction
+- Letting nothing happen after sexual intimacy, with no character change and no relationship consequence
 
 Every change must have a visible trigger chain.
 

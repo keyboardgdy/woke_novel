@@ -1,0 +1,121 @@
+name: Build Executables
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: woke-menu-windows
+            executable: dist/woke-menu/woke-menu.exe
+          - os: ubuntu-latest
+            artifact: woke-menu-linux
+            executable: dist/woke-menu/woke-menu
+          - os: macos-latest
+            artifact: woke-menu-macos
+            executable: dist/woke-menu/woke-menu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller ebooklib pillow
+
+      - name: Generate Windows icon
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -c "from PIL import Image; img=Image.open('assets/logo.png').convert('RGBA'); img.save('assets/logo.ico', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+
+      - name: Generate macOS icon
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p assets/logo.iconset
+          sips -z 16 16 assets/logo.png --out assets/logo.iconset/icon_16x16.png
+          sips -z 32 32 assets/logo.png --out assets/logo.iconset/icon_16x16@2x.png
+          sips -z 32 32 assets/logo.png --out assets/logo.iconset/icon_32x32.png
+          sips -z 64 64 assets/logo.png --out assets/logo.iconset/icon_32x32@2x.png
+          sips -z 128 128 assets/logo.png --out assets/logo.iconset/icon_128x128.png
+          sips -z 256 256 assets/logo.png --out assets/logo.iconset/icon_128x128@2x.png
+          sips -z 256 256 assets/logo.png --out assets/logo.iconset/icon_256x256.png
+          sips -z 512 512 assets/logo.png --out assets/logo.iconset/icon_256x256@2x.png
+          sips -z 512 512 assets/logo.png --out assets/logo.iconset/icon_512x512.png
+          cp assets/logo.png assets/logo.iconset/icon_512x512@2x.png
+          iconutil -c icns assets/logo.iconset -o assets/logo.icns
+
+      - name: Build Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m PyInstaller --name woke-menu --onedir --console --clean -y `
+            --icon "assets\logo.ico" `
+            --add-data "steps;steps" `
+            --add-data "steps_en;steps_en" `
+            --add-data "i18n;i18n" `
+            --add-data "assets;assets" `
+            menu.py
+
+      - name: Build Linux executable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python -m PyInstaller --name woke-menu --onedir --console --clean -y \
+            --add-data "steps:steps" \
+            --add-data "steps_en:steps_en" \
+            --add-data "i18n:i18n" \
+            --add-data "assets:assets" \
+            menu.py
+
+      - name: Build macOS executable
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python -m PyInstaller --name woke-menu --onedir --console --clean -y \
+            --icon "assets/logo.icns" \
+            --add-data "steps:steps" \
+            --add-data "steps_en:steps_en" \
+            --add-data "i18n:i18n" \
+            --add-data "assets:assets" \
+            menu.py
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          test -f "${{ matrix.executable }}"
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "../${{ matrix.artifact }}.zip" woke-menu
+          else
+            tar -czf "../${{ matrix.artifact }}.tar.gz" woke-menu
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.zip
+            ${{ matrix.artifact }}.tar.gz

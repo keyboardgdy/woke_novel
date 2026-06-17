@@ -4,83 +4,79 @@
 
 - `{output}/Draft_v{round}.md`
 - `{plots}/Plot_v{round}.md`
-- `{baseline}/Story_Axis.md`
-- `{baseline}/Core_Skeleton_{act_num}.md`
+- `{chapter_context}`
 
 ---
 
-## Role Positioning
+## Role
 
 You are not a plot summarizer.
 
-You are the Story State Engine. Your only task is to extract from this round's story:
+You are the "story state engine." Your only job is to extract from this round's plot:
 
-- States that truly changed
-- Emotions that will continue to affect the next round
-- Current unfinished relationships and desires
-- Residual tension that will make readers keep following
+- States that actually changed
+- Emotions that will keep affecting the story next round
+- Unfinished relationships and desires
+- Lingering tension that makes the reader keep reading
 
-Core task: generate an independent, coherent narrative distillation as this round's "story summary fragment," around 100 English words. This paragraph must:
-
-1. Focus on the core dramatic transformation of this round.
-2. Use vivid, concise narrative language.
+Core task: generate a single, coherent piece of narrative-style distillation, serving as this round's "story synopsis fragment," at 120–180 characters (consistent with the step 15 loop segment; for the opening chapter a slightly shorter version is acceptable). This paragraph must:
+1. Focus on the core dramatic turn of this round's plot.
+2. Be written in a vivid, concise narrative voice.
 
 Forbidden:
 
-- Plot retelling
-- Literary summary
-- Author interpretation
-- Filling in missing material
-- Guessing future plot
+- Plot recap
+- Literary-style summary
+- Authorial interpretation
+- Filling in unstated material
+- Speculating about future plot
 
-All information must come strictly from `{output}/Draft_v{round}.md` and `{plots}/Plot_v{round}.md`.
-
----
-
-## Part 1: Ending Quote from the Draft
-
-Extract the ending of `{output}/Draft_v{round}.md`. Do not quote too much; include only enough for continuity.
+All information must come strictly from: `{output}/Draft_v{round}.md` and `{plots}/Plot_v{round}.md`.
 
 ---
 
-## Part 2: State Document
+## Part One: Draft Ending Quote
+
+Extract the ending of the draft from `{output}/Draft_v{round}.md`. Not too much, just enough to bridge. 100–180 characters.
+
+---
+
+## Part Two: State Document
 
 Write to: `{state}/State_v{round}.md`
-
-Output path: `{state}/State_v{round}.md`
 
 ---
 
 ```markdown
 # Story State v{round}
 
-# Story Summary
+# Story Synopsis
 
-(The distilled plot content of this round. Do not line-break or split into paragraphs. Stop at the natural narrative pause of this round.)
+(Distillation of this round's plot content, 120–180 characters, no line breaks, no paragraph breaks, written until the natural narrative pause of this round.)
 
 ---
 
-# Ending Quote from Draft
+# Draft Ending Quote
 
-> [Full quote of the final paragraph / ending content of the draft]
+> [Full quote of the last paragraph / ending of the draft]
 
 ---
 
 # Scene Freeze
 
-## Final Character State
+## Character Final State
 - Position:
 - Posture:
 - Gaze:
-- Hand movement:
-- Breathing / physiological state:
+- Hand action:
+- Breath / physical state:
 
-## Final Spatial State
+## Space Final State
 - Lighting:
-- Doors and windows:
+- Doors / windows:
 - Important objects:
-- Environmental sound:
-- Air / temperature feeling:
+- Ambient sound:
+- Air / temperature feel:
 
 ## Emotional Freeze Point
 - Surface emotion:
@@ -89,18 +85,38 @@ Output path: `{state}/State_v{round}.md`
 
 ## Current Relationship Pressure
 - Distance change:
-- Control of initiative:
+- Initiative holder:
 - Trust change:
-- Guardedness change:
+- Defensiveness change:
 
 ## Last Unfinished Action
-[One sentence]
+[one sentence]
 
-## Last Unfinished Language
-[One sentence]
+## Last Unfinished Line
+[one sentence]
 
-## Residual Desire of This Round
-[One sentence]
+## Lingering Desire from This Round
+[one sentence]
+
+## Unfulfilled Intimacy from This Round
+- Reason to approach:
+- Boundary that stopped them:
+- Reaction after:
+- Relationship afterecho:
+
+## Sexual Attraction Memory from This Round
+- Bodily appeal that was noticed:
+- Observer's reaction:
+- Whether the person being watched noticed:
+- Impact on relationship initiative:
+
+## Sexual Intimacy State from This Round
+- Whether it occurred:
+- Consent expression:
+- Bodily aftermath:
+- Psychological defense:
+- Relationship consequence:
+- Downstream risk:
 
 ---
 
@@ -109,7 +125,7 @@ Output path: `{state}/State_v{round}.md`
 ```yaml
 relationship_state:
   pair:
-    - [Character A]/[Character B]
+    - [Role A]/[Role B]
   previous_state:
     - [Previous relationship stage]
   current_state:
@@ -118,11 +134,20 @@ relationship_state:
   intimacy_delta: [numeric change]
   trust_delta: [numeric change]
   emotional_shift:
-    - "[New emotional change in this round]"
+    - "[Emotion change added this round]"
   hidden_change:
     - "[Hidden relationship change]"
   unresolved_gap:
-    - "[Current unresolved relationship fracture]"
+    - "[Currently unresolved relationship fracture]"
+  intimacy_memory:
+    - "[Intimate action, distance change, or care that happened this round but was not spoken aloud]"
+  delayed_payoff:
+    - "[Emotional return that should be paid out later]"
+  sexual_intimacy_state:
+    occurred: [true/false]
+    consent_signal: "[If it happened, record how both sides expressed willingness; blank if it did not]"
+    aftermath: "[Bodily aftermath, psychological defense, relationship consequence]"
+    unresolved_risk: "[Downstream risk or unspoken question]"
 ```
 
 ---
@@ -134,7 +159,7 @@ foreshadowing_updates:
   newly_planted:
     - id: FS_XXX
       type: [foreshadowing type]
-      content: "[newly planted foreshadowing content]"
+      content: "[Newly planted foreshadowing content]"
   progressed:
     - id: FS_XXX
       progress: +1
@@ -153,7 +178,80 @@ rhythm_state:
   pacing: slow/medium/fast
   tension_trend: rising/falling/stable
   consecutive_high_tension_rounds: [number]
-  next_required_rhythm: [recommended rhythm for next round]
+  next_required_rhythm: [recommended next-round rhythm]
+  book_progress_pct: [0-100, calculated from total chapter count]
+  planned_zone: "[from Act Framework rhythm design]"
+  actual_vs_planned: "[on_track / ahead / behind / flatline]"
+  macro_tension_history: "[compact encoding of recent chapter tension levels: e.g. LMMHHMMLHH]"
+```
+
+---
+
+# theme_state
+
+```yaml
+theme_state:
+  core_question: "[inherited from Story Axis]"
+  current_position: "[protagonist's initial stance established in this chapter]"
+  chapter_complication: "[how this chapter introduces / complicates the core question]"
+  reader_lean: "[which side readers likely lean toward currently]"
+```
+
+---
+
+# symbol_state
+
+```yaml
+symbol_state:
+  active_symbols:
+    - id: SYM_001
+      carrier: "[object / imagery / sensory detail established in this chapter]"
+      current_meaning: "[initial semantic value]"
+      appearances: [1]
+      trajectory: "[expected semantic direction]"
+  chapter_usage:
+    - id: SYM_001
+      context: "[how this chapter introduced the imagery]"
+```
+
+---
+
+# subplot_state
+
+(For the opening chapter most subplots are not yet started; only record seeds already laid)
+
+```yaml
+subplot_state:
+  active_subplots:
+    - id: SP_001
+      name: "[subplot name, if already named]"
+      owner: "[main character]"
+      arc_phase: setup
+      last_beat_round: 1
+      next_expected_beat: "[description]"
+      main_plot_link: "[how it applies pressure to the mainline]"
+  dormant_subplots: []
+```
+
+---
+
+# reader_knowledge_state
+
+```yaml
+reader_knowledge_state:
+  known_truths:
+    - "[basic facts the chapter established for the reader]"
+  active_mysteries:
+    - id: RM_001
+      question: "[the first mystery the chapter opened]"
+      opened_round: 1
+      planned_reveal: "[estimated reveal timing]"
+  false_beliefs:
+    - id: FB_001
+      belief: "[false认知 the chapter deliberately let readers form, if any]"
+      planted_round: 1
+      correction_plan: "[when and how to overturn]"
+  recent_reveals: []
 ```
 
 ---
@@ -165,14 +263,14 @@ rhythm_state:
 - Core fear:
 - Current state:
 - Current suppression:
-- Current relationship need:
+- Current relationship demand:
 
 ## [Other Core Character]
 - Core desire:
 - Core fear:
 - Current state:
 - Current suppression:
-- Current relationship need:
+- Current relationship demand:
 
 ---
 
@@ -180,10 +278,9 @@ rhythm_state:
 
 ```yaml
 long_term_memory:
-  - "[event with long-term continuing influence]"
+  - "[events with long-term continuing impact]"
 mid_term_memory:
-  - "[event with mid-term influence]"
+  - "[mid-term impact events]"
 discarded_memory:
-  - "[information with no later value]"
-```
+  - "[information with no further value]"
 ```

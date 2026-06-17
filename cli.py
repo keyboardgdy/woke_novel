@@ -9,18 +9,19 @@ import json
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from app_paths import resource_path
 import i18n as i18n_module
 from i18n import t
 from ui import (
     C, I,
     blank, chip, clear, confirm, dim, info, init, line,
     print_banner, print_choices_table, print_creative_cards, print_panel,
-    print_subheader, prompt, success, warn,
+    print_subheader, prompt, prompt_multiline, success, warn,
 )
 
 
-PRESETS_PATH = Path(__file__).parent / "assets" / "style_presets_classified.json"
-PRESETS_PATH_EN = Path(__file__).parent / "assets" / "style_presets_classified_en.json"
+PRESETS_PATH = resource_path("assets", "style_presets_classified.json")
+PRESETS_PATH_EN = resource_path("assets", "style_presets_classified_en.json")
 _current_language = "zh"
 
 # ask_genre 选完小类后写入这里，ask_user_description 读取作为默认值。
@@ -218,10 +219,9 @@ def ask_user_description() -> str:
     default = _last_theme_desc or ""
     if default:
         info(t("cli.description_default_hint"))
-    desc = prompt(
+    desc = prompt_multiline(
         t("cli.description_prompt"),
         default=default,
-        show_default=False,
         preface=f"({default})" if default else None,
     )
     # 一旦消费完就清空，防止后续误用

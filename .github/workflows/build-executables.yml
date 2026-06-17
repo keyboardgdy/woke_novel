@@ -72,7 +72,6 @@ jobs:
             --add-data "steps_en;steps_en" `
             --add-data "i18n;i18n" `
             --add-data "assets;assets" `
-            --add-data ".menu_config.json;." `
             menu.py
 
       - name: Build Linux executable
@@ -84,7 +83,6 @@ jobs:
             --add-data "steps_en:steps_en" \
             --add-data "i18n:i18n" \
             --add-data "assets:assets" \
-            --add-data ".menu_config.json:." \
             menu.py
 
       - name: Build macOS executable
@@ -97,7 +95,6 @@ jobs:
             --add-data "steps_en:steps_en" \
             --add-data "i18n:i18n" \
             --add-data "assets:assets" \
-            --add-data ".menu_config.json:." \
             menu.py
 
       - name: Smoke test

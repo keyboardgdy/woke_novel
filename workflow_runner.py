@@ -26,6 +26,13 @@ from path_resolver import PathResolver, PROJECTS_ROOT, LOGS_ROOT
 from project_structure import ProjectStructure
 from project_info import ProjectInfo, create_project_info
 
+CODEX_STDOUT_LOG_HEAD_CHARS = 12_000
+CODEX_STDOUT_LOG_TAIL_CHARS = 32_000
+CODEX_STDOUT_LOG_MIN_OMIT_CHARS = 1_024
+CODEX_STDOUT_LOG_FILTER_MAX_BYTES = 200_000  # 过滤后仍超过此体积再做 head/tail 截断
+# 设 1 时退化为旧的「保留全文 + 字符截断」行为，方便排查 codex 问题时取全量日志
+CODEX_STDOUT_VERBOSE_ENV = "WOKE_NOVEL_CODEX_VERBOSE_LOG"
+
 # 步骤定义（序号 -> 名称）
 STEP_FILES = {
     "01": "01 创意方案生成.md",
@@ -48,6 +55,19 @@ STEP_FILES = {
     "16": "16 故事梗概精简.md",
     "17": "17 幕次故事梗概精简.md",
     "18": "18 项目级 CLAUDE.md.md",
+    "Q1": "tools/Q1 章节质量评审.md",
+    "Q2": "tools/Q2 章节定向重写.md",
+    "Q3": "tools/Q3 风格记忆沉淀.md",
+    "Q4": "tools/Q4 剧情吸引力评审.md",
+    "Q5": "tools/Q5 剧情强化重构.md",
+    "Q6": "tools/Q6 剧情钩子账本沉淀.md",
+    "Q7": "tools/Q7 故事主轴吸引力评审.md",
+    "Q7R": "tools/Q7R 故事主轴吸引力重构.md",
+    "Q8": "tools/Q8 幕次框架吸引力评审.md",
+    "Q8R": "tools/Q8R 幕次框架吸引力重构.md",
+    "Q9": "tools/Q9 幕次核心骨架吸引力评审.md",
+    "Q9R": "tools/Q9R 幕次核心骨架吸引力重构.md",
+    "Q10": "tools/Q10 章节上下文包生成.md",
 }
 
 STEP_NAMES = {
@@ -68,9 +88,22 @@ STEP_NAMES = {
     "13": "写作指南",
     "14": "正文创作",
     "15": "状态文档",
-    "16": "幕次故事梗概精简",
-    "17": "故事梗概精简",
+    "16": "故事梗概精简",
+    "17": "幕次故事梗概精简",
     "18": "项目级 CLAUDE.md",
+    "Q1": "章节质量评审",
+    "Q2": "章节定向重写",
+    "Q3": "风格记忆沉淀",
+    "Q4": "剧情吸引力评审",
+    "Q5": "剧情强化重构",
+    "Q6": "剧情钩子账本沉淀",
+    "Q7": "故事主轴吸引力评审",
+    "Q7R": "故事主轴吸引力重构",
+    "Q8": "幕次框架吸引力评审",
+    "Q8R": "幕次框架吸引力重构",
+    "Q9": "幕次核心骨架吸引力评审",
+    "Q9R": "幕次核心骨架吸引力重构",
+    "Q10": "章节上下文包生成",
 }
 
 
@@ -212,8 +245,26 @@ class WorkflowRunner:
             self.path_resolver.novel_size = self.novel_size
             self.path_resolver.target_word_count = self.target_word_count
 
-        # 会话管理
-        self._session_uuids: Dict[str, str] = {}
+        # 会话管理:按 provider 分桶(``{"claude": {...}, "codex": {...}}``),
+        # 旧格式(扁平 ``Dict[display_id, id]``)一次性迁到 claude 桶下。
+        raw_sessions = self.project_info.get("session_uuids") or {}
+        if raw_sessions and all(isinstance(v, str) for v in raw_sessions.values()):
+            self._session_uuids: Dict[str, Dict[str, str]] = {
+                "claude": dict(raw_sessions), "codex": {},
+            }
+        else:
+            self._session_uuids = {
+                "claude": dict(raw_sessions.get("claude", {}) or {}),
+                "codex":  dict(raw_sessions.get("codex",  {}) or {}),
+            }
+        # 切到当前 provider 后,如对方桶残留,打条 info 让用户心里有数。
+        other_provider = "codex" if self.provider == "claude" else "claude"
+        other_count = len(self._session_uuids.get(other_provider, {}))
+        if other_count:
+            note(t("runner.cross_provider_sessions_detected",
+                   count=other_count, other_provider=other_provider,
+                   current_provider=self.provider))
+        self._session_bucket = self._session_uuids.setdefault(self.provider, {})
         self._run_status_path = PROJECTS_ROOT / self.project_name / ".run_status.json"
         self._run_status_token = uuid.uuid4().hex
         self._write_run_status()
@@ -272,6 +323,34 @@ class WorkflowRunner:
     def make_display_id(self, session_name: str) -> str:
         """生成会话ID"""
         return f"novel_{self.project_name}_{session_name}"
+
+    def _persist_session_uuid(self, display_id: str, session_uuid: str) -> None:
+        """把 session id 写进当前 provider 的桶里。
+
+        数据结构为 ``{"claude": {display_id: id}, "codex": {display_id: id}}``,
+        跨 provider 切档时不会让对方桶的 id 误用到本 provider。
+        """
+        if not session_uuid:
+            return
+        self._session_uuids.setdefault(self.provider, {})[display_id] = session_uuid
+        self.project_info.update(session_uuids=self._session_uuids)
+
+    def _id_matches_provider(self, display_id: str, sid: str) -> bool:
+        """判断持久化的 session id 是否属于当前 provider。
+
+        - claude:任何 RFC 4122 UUID 都能被 ``--session-id/--resume`` 接受。
+        - codex:thread id 由后端颁发,本地 ``uuid.uuid4()`` 出来的 v4 UUID
+          一定不在后端,直接拒绝;非 UUID 形态或非 v4 UUID 放行(由 codex 自身校验)。
+        """
+        if not sid:
+            return False
+        try:
+            u = uuid.UUID(sid)
+        except ValueError:
+            return self.provider != "claude"
+        if self.provider == "claude":
+            return True
+        return u.version != 4
 
     def load_step_template(self, step: str) -> str:
         """第一层：加载 .md 模板"""
@@ -355,28 +434,54 @@ class WorkflowRunner:
             result: Optional[_AttemptResult] = None
             effective_session_uuid = session_uuid if self.provider == "claude" or resume else None
 
-            for attempt in range(1, max_attempts + 1):
+            attempt = 0
+            done = False
+            while not done:
+                attempt += 1
                 is_retry = attempt > 1
+
+                # 会话已失效检测（提前到此处，在构建命令前就决定是否切新会话）
+                session_was_dead = (
+                    result is not None and "no rollout found" in (result.stderr or "")
+                )
+                if session_was_dead:
+                    note(t("runner.session_dead", error=result.stderr[:200]))
+                    if self.provider == "codex":
+                        # codex 的 thread id 由后端颁发,本地 uuid4 永远查不到;
+                        # 正确动作是丢 resume 标志,让 codex 起新 thread(不传 id)。
+                        effective_session_uuid = None
+                        forced_no_resume = True
+                    else:
+                        effective_session_uuid = str(uuid.uuid4())
+                        self._persist_session_uuid(display_id, effective_session_uuid)
+                        forced_no_resume = False
+                elif is_retry and attempt == max_attempts:
+                    # 最后一次重试 → 放弃旧上下文，起新会话
+                    if self.provider == "claude":
+                        effective_session_uuid = str(uuid.uuid4())
+                        self._persist_session_uuid(display_id, effective_session_uuid)
+                    else:
+                        effective_session_uuid = None
+                    forced_no_resume = True
+                else:
+                    # 默认:首次/中间重试都尝试续接;codex 续接目标若死了,
+                    # 下一轮会被 session_was_dead 分支接走。
+                    forced_no_resume = False
+
                 if is_retry:
                     backoff = self._retry_backoff(attempt - 1)
-                    is_new_session = (attempt == max_attempts)
+                    is_new_session = attempt == max_attempts
                     msg_key = "runner.retry_new_session" if is_new_session else "runner.retry"
                     warn(
                         t(msg_key, step=step, retry=attempt - 1,
                           max_retries=self.max_retries, seconds=f"{backoff:.0f}",
-                          session=effective_session_uuid[:8])
+                          session=(effective_session_uuid[:8]
+                                   if effective_session_uuid else "无"))
                     )
                     time.sleep(backoff)
 
-                # 重试时强制续接上下文；第3次重试（attempt==max_attempts）开启新会话。
-                effective_resume = resume or is_retry
-                if is_retry and attempt == max_attempts:
-                    # 第3次重试 → 放弃旧上下文，起新会话
-                    effective_resume = False
-                    effective_session_uuid = str(uuid.uuid4())
-                    self._session_uuids[display_id] = effective_session_uuid
-                if self.provider == "codex" and not effective_session_uuid:
-                    effective_resume = False
+                # 默认续接 = resume 标志 OR 处于重试;会话已死/最后一次重试可强制覆盖。
+                effective_resume = (not forced_no_resume) and (resume or is_retry)
                 cmd, stdin_payload = self._build_cli_command(
                     cli_cmd, temp_path, prompt, effective_session_uuid, effective_resume
                 )
@@ -429,14 +534,15 @@ class WorkflowRunner:
                     if parsed_session_id:
                         result.session_id = parsed_session_id
                         effective_session_uuid = parsed_session_id
-                        self._session_uuids[display_id] = parsed_session_id
+                        self._persist_session_uuid(display_id, parsed_session_id)
                 attempts.append((result, attempt))
 
                 if result.returncode == 0:
                     if is_retry:
                         success(t("runner.retry_success", step=step, attempt=attempt, max_attempts=max_attempts))
                     step_result(True, elapsed=elapsed)
-                    break
+                    done = True
+                    continue
 
                 err = (
                     t("runner.timeout_short", seconds=1800) if timed_out
@@ -446,6 +552,7 @@ class WorkflowRunner:
                     warn(t("runner.attempt_failed", step=step, attempt=attempt, max_attempts=max_attempts, error=err))
                 else:
                     step_result(False, message=err, elapsed=elapsed)
+                    done = True
 
             # 一次性记录所有尝试的日志（含重试）
             self._log_step(step, prompt, attempts, display_id, session_uuid)
@@ -508,10 +615,174 @@ class WorkflowRunner:
                     f.write(f"{t('log.cli_session_id')}: {result.session_id}\n")
                 if result.stdout:
                     f.write(f"\n--- Stdout ({len(result.stdout)} chars) ---\n")
-                    f.write(result.stdout)
+                    f.write(self._format_stdout_for_log(result.stdout))
                 if result.stderr:
                     f.write(f"\n--- Stderr ---\n")
                     f.write(result.stderr)
+
+    def _format_stdout_for_log(self, stdout: str) -> str:
+        """Keep Codex logs bounded while preserving useful failure context.
+
+        Codex 的 ``--json`` 输出是 JSONL，单个 ``command_execution`` 事件里的
+        ``aggregated_output`` 会把被读取的文件全文塞进 stdout（动辄数千字符）；
+        ``item.started`` 与 ``item.completed`` 又是配对冗余。直接字符截断会恰好切
+        掉 ``agent_message`` 等关键内容，所以默认先做事件级过滤，再按体积兜底
+        截断。需要排查时可设 ``WOKE_NOVEL_CODEX_VERBOSE_LOG=1`` 退回旧的字符
+        截断以保留全量。
+        """
+        if self.provider != "codex":
+            return stdout
+
+        if os.environ.get(CODEX_STDOUT_VERBOSE_ENV, "").strip() == "1":
+            return self._truncate_stdout_chars(stdout)
+
+        filtered, total, filtered_count = self._filter_codex_stdout(stdout)
+        if total == 0:
+            # 解析不出 JSONL（极少见，比如 codex 改格式），退回旧的字符截断
+            return self._truncate_stdout_chars(stdout)
+
+        header_note = ""
+        if filtered_count:
+            header_note = (
+                t("log.codex_stdout_filtered", filtered=filtered_count, total=total)
+                + "\n\n"
+            )
+
+        body = filtered
+        if len(body.encode("utf-8")) > CODEX_STDOUT_LOG_FILTER_MAX_BYTES:
+            body = self._truncate_stdout_chars(body)
+        return header_note + body
+
+    @staticmethod
+    def _filter_codex_stdout(stdout: str) -> tuple[str, int, int]:
+        """逐行解析 Codex JSONL，剥离高噪声事件，返回 ``(拼接后文本, 总行数, 过滤行数)``。
+
+        保留：
+        - ``thread.started`` / ``turn.started`` / ``turn.completed``（含 token usage）
+        - ``error``
+        - ``item.completed`` 里的 ``agent_message`` / ``reasoning`` 的 ``text``
+        - ``item.completed`` 里的 ``command_execution``（但丢弃 ``aggregated_output``）
+        - ``item.completed`` 里的 ``file_change``
+
+        丢弃：
+        - ``item.started``（与 completed 配对冗余）
+        - ``command_execution.aggregated_output``（含被读取文件的全文）
+        - 未知 type 的 payload 全字段
+        """
+        lines = stdout.splitlines()
+        total = 0
+        filtered_count = 0
+        out_lines: List[str] = []
+
+        for raw in lines:
+            text = raw.strip()
+            if not text:
+                continue
+            total += 1
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                # 非 JSON 行原样保留（比如启动横幅、警告）
+                out_lines.append(text)
+                continue
+
+            if not isinstance(payload, dict):
+                out_lines.append(text)
+                continue
+
+            event_type = payload.get("type")
+
+            if event_type == "item.started":
+                filtered_count += 1
+                continue
+
+            if event_type in {"thread.started", "turn.started", "turn.completed", "error"}:
+                out_lines.append(text)
+                continue
+
+            if event_type == "item.completed":
+                item = payload.get("item")
+                if not isinstance(item, dict):
+                    filtered_count += 1
+                    continue
+                item_type = item.get("type")
+
+                if item_type in {"agent_message", "reasoning"}:
+                    compact = {
+                        "type": "item.completed",
+                        "item": {
+                            "id": item.get("id"),
+                            "type": item_type,
+                            "text": item.get("text", ""),
+                        },
+                    }
+                    out_lines.append(json.dumps(compact, ensure_ascii=False))
+                    continue
+
+                if item_type == "command_execution":
+                    compact = {
+                        "type": "item.completed",
+                        "item": {
+                            "id": item.get("id"),
+                            "type": "command_execution",
+                            "command": item.get("command"),
+                            "exit_code": item.get("exit_code"),
+                            "status": item.get("status"),
+                        },
+                    }
+                    out_lines.append(json.dumps(compact, ensure_ascii=False))
+                    filtered_count += 1
+                    continue
+
+                if item_type == "file_change":
+                    changes = item.get("changes")
+                    compact_item = {
+                        "id": item.get("id"),
+                        "type": "file_change",
+                        "status": item.get("status"),
+                        "changes": changes if isinstance(changes, list) else None,
+                    }
+                    compact_item = {k: v for k, v in compact_item.items() if v is not None}
+                    out_lines.append(
+                        json.dumps(
+                            {"type": "item.completed", "item": compact_item},
+                            ensure_ascii=False,
+                        )
+                    )
+                    continue
+
+                # 未知 item.type：保留骨架
+                out_lines.append(
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {"id": item.get("id"), "type": item_type},
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                continue
+
+            # 未知顶层 type，原样保留（不计入过滤）
+            out_lines.append(text)
+
+        return "\n".join(out_lines), total, filtered_count
+
+    @staticmethod
+    def _truncate_stdout_chars(stdout: str) -> str:
+        """按字符数 head/tail 截断，原 ``_format_stdout_for_log`` 的行为。"""
+        max_chars = CODEX_STDOUT_LOG_HEAD_CHARS + CODEX_STDOUT_LOG_TAIL_CHARS
+        if len(stdout) <= max_chars + CODEX_STDOUT_LOG_MIN_OMIT_CHARS:
+            return stdout
+
+        omitted = len(stdout) - max_chars
+        head = stdout[:CODEX_STDOUT_LOG_HEAD_CHARS].rstrip()
+        tail = stdout[-CODEX_STDOUT_LOG_TAIL_CHARS:].lstrip()
+        return (
+            f"{head}\n\n"
+            f"--- {t('log.codex_stdout_truncated', omitted=omitted, head=CODEX_STDOUT_LOG_HEAD_CHARS, tail=CODEX_STDOUT_LOG_TAIL_CHARS)} ---\n\n"
+            f"{tail}"
+        )
 
     def _build_cli_command(self, cli_cmd: str, temp_path: str, prompt: str,
                            session_uuid: str, resume: bool) -> tuple[List[str], Optional[str]]:
@@ -939,16 +1210,24 @@ class WorkflowRunner:
         if display_id is None:
             display_id = self.make_display_id(step)
 
-        # 同一 display_id 应该在同一个 session 中
+        # 同一 display_id 应该在同一个 session 中(在当前 provider 桶里查找)
         # 首次使用该 display_id -> 创建新会话
         # 后续使用同一 display_id -> --resume 恢复会话
-        if display_id in self._session_uuids:
-            session_uuid = self._session_uuids[display_id]
+        # 桶里命中但格式不属于当前 provider(脏数据) -> 清掉并 warn
+        bucket = self._session_bucket
+        if display_id in bucket and self._id_matches_provider(display_id, bucket[display_id]):
+            session_uuid = bucket[display_id]
             is_resume = True
         else:
+            stale = bucket.pop(display_id, None)
+            if stale:
+                warn(t("runner.session_stale_dropped",
+                       provider=self.provider, display_id=display_id,
+                       stale=stale[:8]))
+                self.project_info.update(session_uuids=self._session_uuids)
             session_uuid = str(uuid.uuid4()) if self.provider == "claude" else None
             if self.provider == "claude":
-                self._session_uuids[display_id] = session_uuid
+                self._persist_session_uuid(display_id, session_uuid)
             self._session_counter += 1
             self._session_number_map[display_id] = self._session_counter
             is_resume = False

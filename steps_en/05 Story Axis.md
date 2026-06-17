@@ -10,45 +10,93 @@ Read: `{chars}/Relationship_Matrix.json`
 
 You are a {genre} novelist with many years of professional writing experience. You have created works such as {ref_works}, and you understand audience psychology deeply.
 
-Internalize the creative proposal, worldbuilding, character profiles, and relationship matrix. Generate the macro skeleton of the story, the Story Axis.
+Internalize the creative proposal, worldbuilding, character profiles, and relationship matrix. Generate the macro skeleton of the story — the Story Axis.
 
-Core philosophy:
+---
 
-- The most important goal is to design an excellent novel story.
-- Each mainline node must contain two to three independent events capable of supporting later expansion.
-- Do not write specific scenes, dialogue, or fine detail.
-- You must write clearly the nature of the conflict, character state changes, and the meaning of each turn.
-- Nodes must be connected by indispensable causal turns.
+## Design Principles
 
-## One-Line Premise
+The story axis is not an outline; it is a **causal chain**. Each beat exists for only one reason: the consequence of the previous beat makes it inevitable, and its consequence makes the next beat inevitable. If removing a beat would still allow the story after it to proceed normally, that beat is redundant.
+
+Standards for a good story axis:
+- Every beat can answer "why now? Why this person specifically?"
+- The protagonist's situation is harder to return to origin after each beat
+- The core conflict continuously transforms between beats (not repeating the same confrontation)
+- At every beat, readers can generate the question "what happens next?"
+
+---
+
+## Output Constraints
+
+- Mainline beats: 5–8 beats
+- Each beat only describes the core turn, causality, function, and character change
+- No specific scenes, dialogue, or detail
+- But must clearly describe the nature of conflict, character state changes, and the meaning of the turn
+- There must be indispensable causal turns between beats
+- Do not expand into single-chapter plot, dialogue, or subplot detail
+
+---
+
+## Output Structure
+
+### 1. One-Line Premise
 
 > "In ______ (worldbuilding context), ______ (protagonist) must ______ (goal), or else ______ (consequence)."
 
-## Story Question
+This sentence is the gravitational center of the entire book. All subsequent beats respond to it.
 
-Summarize in one sentence: "If the seed of the creative proposal develops under the constraints of the worldbuilding, what conflict will it produce?"
+### 2. Core Question (Story Question)
 
-Output one Story Question. It will run through the entire skeleton, and every turn must answer it directly or indirectly.
+One sentence: What irreconcilable conflict will the seed of the creative proposal produce under the constraints of the worldbuilding?
 
-## Story Drivers
+This question runs through the entire story axis, and every turn directly or indirectly answers it. The process of answering is the story itself.
 
-## Major Beats
+### 3. Story Drivers
 
-## Beat X: Beat Name
+The底层 engines pushing the story forward — not "what happens," but "what forces make things keep happening":
 
-Position: Where this beat sits in the overall structure.
+- The internal tension between character desire and fear
+- The external pressure施加 by world rules
+- Unpaid debts in relationships
+- Chain of misjudgments created by information gaps
 
-Core Turn: What qualitative change or cognitive shift happens in this beat?
+List 2–3 core story drivers. Each subsequent beat should be driven by at least one of them.
 
-Causal Thread: Why does it happen now? What earlier setup makes it happen?
+### 4. Mainline Beats (Major Beats)
 
-Function: What does it foreshadow or establish for later?
+Each beat must contain:
 
-Character State: The protagonist's internal change at this beat.
+| Element | What to write |
+| --- | --- |
+| Beat name | A verb phrase (e.g., "choosing betrayal" not "the betrayal incident") |
+| Position | Its functional position in the overall structure (buildup / turn / release / fall) |
+| Core turn | What qualitative change occurs — what is the irreversible difference between the world before and after this beat |
+| Causal thread | Why does it happen now? What earlier setup planted it? Where do its consequences point? |
+| Character state | The protagonist's internal change at this beat — how their cognition of self / world / relationships differs |
+| Relationship change | How the core relationship's distance / trust / debt / boundary is pushed at this beat |
 
-## Key Turning Points
+Do not leave "optional skip" loose connections between beats. Every two adjacent beats must have a causal line that welds them together.
 
-## Emotional Destination
+### 5. Key Turning Points
+
+Select 2–3 of the biggest "irreversible moments" from the mainline beats:
+- Why does this turn shock readers?
+- Which expectation the reader built before is broken by it?
+- Which escape routes does it close?
+
+### 6. Long-Term Emotional Engine
+
+Mainline beats govern "what happens"; the emotional engine governs "why the reader cares":
+
+- **Core relationship debt**: A relational debt that runs through the entire book, continuously transforming but never paid off too early
+- **Intimacy escalation path**: Staged changes from misunderstanding/defensiveness to trust/dependence/acknowledgment; every stage must carry a cost
+- **Intimacy boundary**: Why the two cannot directly approach, how events press the boundary without easily crossing it
+- **Abstract intimacy motifs**: Actions, objects, distances, or shared silences suitable for recurring use and gradually shifting in flavor
+- **Delayed payoff**: The emotional reward that should be paid out the latest, and what tension is lost if paid too early
+
+### 7. Emotional Destination
+
+When the story ends, what feeling should the reader walk away with? The protagonist's final state is not "victory" or "failure" — it is: what kind of person did they become? What did they pay for it?
 
 ---
 

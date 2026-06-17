@@ -9,10 +9,11 @@ import sys
 import time
 import urllib.request
 import webbrowser
-from pathlib import Path
+
+from app_paths import runtime_path
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = runtime_path()
 URL = "http://127.0.0.1:8787"
 HEALTH_URL = f"{URL}/api/v1/health"
 LOG_FILE = ROOT / "logs" / "woke_launcher.log"

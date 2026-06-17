@@ -12,7 +12,7 @@ Your work:
 2. Remove secondary details, repeated descriptions, and transitional sentences. Merge multiple sentences that describe the same event.
 3. Preserve all key plot turns, major character decisions, emotional high points, and unresolved suspense.
 
-Your output must still be a smooth, coherent `Story Summary` paragraph, not a list, outline, or abstract.
+After each compression, the Story Summary body should stay within 1000-1800 characters, hard cap 2200 characters. If the current summary is still short, do not pad it to hit the lower bound; only deduplicate and smooth the sentences.
 
 ## Core Requirements
 
@@ -30,6 +30,8 @@ Delete:
 - Details of transitional plot
 - Repeated emotional setup
 - Nonessential side-plot information
+
+If the current summary is too long, preferentially merge events of the same kind, delete repeated emotion, and compress transitional action, but you must preserve key turns, major character decisions, emotional high points, and unresolved suspense. The output must be only the compressed story summary; do not explain the reasoning behind the edits.
 
 ## Output
 

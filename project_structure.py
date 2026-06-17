@@ -34,6 +34,9 @@ PROJECT_STRUCTURE = {
     "04_characters": [
         # 人物档案目录（对应步骤04-05, 15）
     ],
+    "05_quality": [
+        # 质量评审、定向重写、风格记忆目录（对应 tools 质量闭环）
+    ],
 }
 
 

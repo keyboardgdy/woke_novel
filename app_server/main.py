@@ -29,14 +29,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app_paths import resource_path, runtime_path
 
-WORKSPACE = Path(__file__).resolve().parents[1]
+WORKSPACE = runtime_path()
 PROJECTS_ROOT = WORKSPACE / "projects"
 LOGS_ROOT = WORKSPACE / "logs"
 CONFIG_FILE = WORKSPACE / ".menu_config.json"
-FRONTEND_DIST = WORKSPACE / "frontend" / "dist"
-PRESETS_ZH = WORKSPACE / "assets" / "style_presets_classified.json"
-PRESETS_EN = WORKSPACE / "assets" / "style_presets_classified_en.json"
+FRONTEND_DIST = resource_path("frontend", "dist")
+PRESETS_ZH = resource_path("assets", "style_presets_classified.json")
+PRESETS_EN = resource_path("assets", "style_presets_classified_en.json")
 
 PROJECT_DIRS = [
     "00_baseline",
@@ -68,16 +69,34 @@ STEP_NAMES = {
     "16": "故事梗概精简",
     "17": "幕次故事梗概精简",
     "18": "项目级 CLAUDE.md",
+    "Q1": "章节质量评审",
+    "Q2": "章节定向重写",
+    "Q3": "风格记忆沉淀",
+    "Q4": "剧情吸引力评审",
+    "Q5": "剧情强化重构",
+    "Q6": "剧情钩子账本沉淀",
+    "Q7": "故事主轴吸引力评审",
+    "Q7R": "故事主轴吸引力重构",
+    "Q8": "幕次框架吸引力评审",
+    "Q8R": "幕次框架吸引力重构",
+    "Q9": "幕次核心骨架吸引力评审",
+    "Q9R": "幕次核心骨架吸引力重构",
+    "Q10": "章节上下文包生成",
 }
 
-STEP_ORDER = ["01", "02", "03", "04", "05", "05a", "05b", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"]
+STEP_ORDER = [
+    "01", "02", "03", "04",
+    "05", "Q7", "Q7R", "05a", "Q8", "Q8R", "05b", "Q9", "Q9R",
+    "18", "Q10", "06", "07", "Q4", "Q5", "Q6", "08", "09", "Q1", "Q2", "Q3", "10",
+    "11", "12", "13", "14", "15", "16", "17",
+]
 
 STAGES = [
     ("creative", "创意", ["01", "02"]),
     ("world", "世界/人物", ["03", "04"]),
-    ("axis", "主轴", ["05", "05a", "05b", "18"]),
-    ("opening", "开篇", ["06", "07", "08", "09", "10"]),
-    ("draft_loop", "正文循环", ["11", "12", "13", "14", "15", "16"]),
+    ("axis", "主轴", ["05", "Q7", "Q7R", "05a", "Q8", "Q8R", "05b", "Q9", "Q9R", "18"]),
+    ("opening", "开篇", ["Q10", "06", "07", "Q4", "Q5", "Q6", "08", "09", "Q1", "Q2", "Q3", "10"]),
+    ("draft_loop", "正文循环", ["Q10", "11", "12", "Q4", "Q5", "Q6", "13", "14", "Q1", "Q2", "Q3", "15", "16"]),
     ("act_end", "幕末整理", ["17", "18"]),
 ]
 

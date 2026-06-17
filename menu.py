@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 
-sys.path.insert(0, str(Path(__file__).parent))
+from app_paths import runtime_path
 
 try:
     import ebooklib
@@ -47,7 +47,9 @@ _pending_user_description: Optional[str] = None
 _pending_novel_size: Optional[str] = None
 _current_provider: str = "claude"
 _current_language: str = "zh"
-CONFIG_FILE = Path(__file__).parent / ".menu_config.json"
+# 默认作家模式（停顿）。用户在设置里可切换为全自动模式（--no-pause）。
+_current_pause_mode: bool = True
+CONFIG_FILE = runtime_path(".menu_config.json")
 SUPPORTED_PROVIDERS = ("claude", "codex")
 SUPPORTED_LANGUAGES = ("zh", "en")
 
@@ -60,6 +62,15 @@ def _normalize_provider(provider: Optional[str]) -> str:
 def _normalize_language(language: Optional[str]) -> str:
     value = (language or "zh").strip().lower()
     return value if value in SUPPORTED_LANGUAGES else "zh"
+
+
+def _normalize_pause_mode(value: Optional[Any]) -> bool:
+    """统一 pause_mode 序列化：truthy 都视为 True（作家模式）。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off", "auto", "full-auto"}
+    return bool(value)
 
 
 def _load_menu_config() -> Dict[str, Any]:
@@ -115,6 +126,16 @@ def _has_configured_language(config: Dict[str, Any]) -> bool:
     return isinstance(value, str) and value.strip().lower() in SUPPORTED_LANGUAGES
 
 
+def _load_configured_pause_mode() -> bool:
+    return _normalize_pause_mode(_load_menu_config().get("pause_mode"))
+
+
+def _save_configured_pause_mode(pause_mode: bool) -> bool:
+    config = _load_menu_config()
+    config["pause_mode"] = bool(pause_mode)
+    return _save_menu_config(config)
+
+
 def _provider_label(provider: Optional[str] = None) -> str:
     value = (provider or _current_provider or "claude").lower()
     return "Codex CLI" if value == "codex" else "Claude CLI"
@@ -123,6 +144,15 @@ def _provider_label(provider: Optional[str] = None) -> str:
 def _language_label(language: Optional[str] = None) -> str:
     value = _normalize_language(language or _current_language)
     return t("language.en_label") if value == "en" else t("language.zh_label")
+
+
+def _pause_mode_label(pause_mode: Optional[bool] = None) -> str:
+    value = _current_pause_mode if pause_mode is None else bool(pause_mode)
+    return t("pause_mode.author") if value else t("pause_mode.full_auto")
+
+
+def _main_option(icon: str, text: str) -> str:
+    return f"{icon}  {text}"
 
 
 def choose_language(default_language: Optional[str] = None) -> str:
@@ -137,7 +167,10 @@ def choose_language(default_language: Optional[str] = None) -> str:
             t("language.en_option"),
         ],
         default=1 if default_value == "en" else 0,
+        allow_escape=True,
     )
+    if idx is None:
+        return default_value
     return "en" if idx == 1 else "zh"
 
 
@@ -153,19 +186,52 @@ def choose_provider(default_provider: Optional[str] = None) -> str:
             t("provider.codex_option"),
         ],
         default=1 if default_value == "codex" else 0,
+        allow_escape=True,
     )
+    if idx is None:
+        return default_value
     return "codex" if idx == 1 else "claude"
+
+
+def choose_pause_mode(default_pause_mode: Optional[bool] = None) -> bool:
+    """选择运行模式：True=作家模式（停顿），False=全自动模式（跳过停顿）。"""
+    clear()
+    print_banner(t("app.title"), subtitle=t("settings.pause_mode_subtitle"))
+    default_value = _current_pause_mode if default_pause_mode is None else bool(default_pause_mode)
+    options = [
+        t("pause_mode.author") + "  " + t("pause_mode.author_desc"),
+        t("pause_mode.full_auto") + "  " + t("pause_mode.full_auto_desc"),
+    ]
+    idx = select(t("settings.pause_mode_prompt"), options, default=0 if default_value else 1, allow_escape=True)
+    if idx is None:
+        return default_value
+    return idx == 0
 
 
 # ---------------------------------------------------------------------------
 # 项目发现 + 摘要
 # ---------------------------------------------------------------------------
 def _projects_root() -> Path:
-    return Path(__file__).parent / "projects"
+    return runtime_path("projects")
 
 
 def _logs_root() -> Path:
-    return Path(__file__).parent / "logs"
+    return runtime_path("logs")
+
+
+def _run_workflow_command(args: List[str]) -> None:
+    if getattr(sys, "frozen", False):
+        import run_workflow
+
+        old_argv = sys.argv[:]
+        try:
+            sys.argv = ["run_workflow.py", *args]
+            run_workflow.main()
+        finally:
+            sys.argv = old_argv
+        return
+
+    subprocess.run([sys.executable, "run_workflow.py", *args])
 
 
 def _is_direct_child(path: Path, parent: Path) -> bool:
@@ -176,13 +242,16 @@ def _is_direct_child(path: Path, parent: Path) -> bool:
     return path.parent.resolve() == parent.resolve()
 
 
-def prompt_new_project_name(message: Optional[str] = None, default: Optional[str] = None) -> str:
+def prompt_new_project_name(message: Optional[str] = None, default: Optional[str] = None) -> Optional[str]:
     if message is None:
         message = t("project.new_name_prompt")
     current_message = message
     current_default = default
     while True:
-        project = prompt(current_message, default=current_default).strip()
+        value = prompt(current_message, default=current_default, allow_escape=True)
+        if value is None:
+            return None
+        project = value.strip()
         if not project:
             warn(t("project.name_empty"))
             current_message = t("project.name_retry")
@@ -298,6 +367,8 @@ def select_project_mode() -> Tuple[Optional[str], Optional[str]]:
     # 创建新项目
     print_section(t("project.create_section"), color=C.ACCENT)
     project = prompt_new_project_name()
+    if project is None:
+        return (None, None)
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
     novel_size = cli_module.ask_novel_size()
@@ -370,7 +441,10 @@ def single_step_mode() -> None:
             t("single.choose_creative"),
             [t("single.creative_option", index=i + 1) for i in range(option_count)],
             default=0,
+            allow_escape=True,
         )
+        if chosen is None:
+            return
         success(t("single.creative_chosen", index=chosen + 1))
         if not runner.run_step("02", runner.make_display_id(f"creative_option_{chosen+1}"), option_index=chosen+1):
             error(t("single.supplement_failed"))
@@ -387,6 +461,8 @@ def full_loop_mode() -> None:
     print_banner(t("full.title"), subtitle=t("full.subtitle"))
 
     project = prompt_new_project_name(t("full.project_prompt"), default="my_novel")
+    if project is None:
+        return
     genre = cli_module.ask_genre()
     user_description = cli_module.ask_user_description()
     novel_size = cli_module.ask_novel_size()
@@ -404,6 +480,7 @@ def full_loop_mode() -> None:
         t("full.config_options", count=option_count),
         t("full.config_language", language=_language_label()),
         t("full.config_provider", provider=_provider_label()),
+        t("full.config_mode", mode=_pause_mode_label()),
         t("full.config_dry_run", value=t("common.yes") if dry_run else t("common.no")),
     ])
     print_panel(t("full.config_title"), body, color=C.ACCENT, icon=I.DIAMOND)
@@ -413,7 +490,7 @@ def full_loop_mode() -> None:
         return
 
     cmd = [
-        sys.executable, "run_workflow.py", "loop",
+        "loop",
         "--project-name", project,
         "--genre", genre,
         "--option-count", str(option_count),
@@ -424,7 +501,9 @@ def full_loop_mode() -> None:
     ]
     if dry_run:
         cmd.append("--dry")
-    subprocess.run(cmd)
+    if not _current_pause_mode:
+        cmd.append("--no-pause")
+    _run_workflow_command(cmd)
     press_enter()
 
 
@@ -463,12 +542,14 @@ def continue_mode() -> None:
         return
 
     cmd = [
-        sys.executable, "run_workflow.py", "continue",
+        "continue",
         "--project-name", project,
         "--provider", _current_provider,
         "--language", _current_language,
     ]
-    subprocess.run(cmd)
+    if not _current_pause_mode:
+        cmd.append("--no-pause")
+    _run_workflow_command(cmd)
     press_enter()
 
 
@@ -565,27 +646,34 @@ def view_steps_list() -> None:
 # 系统设置
 # ---------------------------------------------------------------------------
 def settings_mode() -> None:
-    """系统设置：修改菜单会话使用的语言和外部 CLI 架构。"""
-    global _current_provider, _current_language
+    """系统设置：修改菜单会话使用的语言、外部 CLI 架构和运行模式。"""
+    global _current_provider, _current_language, _current_pause_mode
 
     clear()
     print_banner(
         t("settings.title"),
-        subtitle=t("settings.subtitle", language=_language_label(), provider=_provider_label()),
+        subtitle=t(
+            "settings.subtitle",
+            language=_language_label(),
+            provider=_provider_label(),
+            mode=_pause_mode_label(),
+        ),
     )
     print_kv([
         (t("settings.current_language"), _language_label()),
         (t("settings.current_provider"), _provider_label()),
+        (t("settings.current_mode"), _pause_mode_label()),
         (t("settings.config_file"), str(CONFIG_FILE)),
     ])
 
     options = [
         t("settings.change_language"),
         t("settings.change_provider"),
+        t("settings.change_pause_mode"),
         t("settings.back"),
     ]
-    idx = select(t("settings.prompt"), options, default=0)
-    if idx == 2:
+    idx = select(t("settings.prompt"), options, default=0, allow_escape=True)
+    if idx is None or idx == 3:
         return
 
     if idx == 0:
@@ -603,15 +691,28 @@ def settings_mode() -> None:
         press_enter()
         return
 
-    selected_provider = choose_provider(_current_provider)
-    if selected_provider == _current_provider:
-        info(t("settings.provider_unchanged", provider=_provider_label()))
+    if idx == 1:
+        selected_provider = choose_provider(_current_provider)
+        if selected_provider == _current_provider:
+            info(t("settings.provider_unchanged", provider=_provider_label()))
+            press_enter()
+            return
+
+        _current_provider = selected_provider
+        if _save_configured_provider(_current_provider):
+            success(t("settings.provider_changed", provider=_provider_label()))
         press_enter()
         return
 
-    _current_provider = selected_provider
-    if _save_configured_provider(_current_provider):
-        success(t("settings.provider_changed", provider=_provider_label()))
+    selected_pause_mode = choose_pause_mode(_current_pause_mode)
+    if selected_pause_mode == _current_pause_mode:
+        info(t("settings.pause_mode_unchanged", mode=_pause_mode_label()))
+        press_enter()
+        return
+
+    _current_pause_mode = selected_pause_mode
+    if _save_configured_pause_mode(_current_pause_mode):
+        success(t("settings.pause_mode_changed", mode=_pause_mode_label()))
     press_enter()
 
 
@@ -816,8 +917,8 @@ def tools_mode() -> None:
         t("tools.split_epub_option"),
         t("tools.back"),
     ]
-    idx = select(t("tools.prompt"), options, default=0)
-    if idx == 1:
+    idx = select(t("tools.prompt"), options, default=0, allow_escape=True)
+    if idx is None or idx == 1:
         return
 
     epub_input = prompt(t("tools.epub_path_prompt"), show_default=False).strip().strip('"')
@@ -902,7 +1003,9 @@ def export_mode() -> None:
         t("export.format_txt"),
         t("export.format_epub"),
     ]
-    fmt_idx = select(t("export.format_prompt"), format_options, default=0)
+    fmt_idx = select(t("export.format_prompt"), format_options, default=0, allow_escape=True)
+    if fmt_idx is None:
+        return
 
     export_md = fmt_idx in (0, 1)
     export_txt = fmt_idx in (0, 2)
@@ -999,7 +1102,7 @@ def export_mode() -> None:
 # 主菜单
 # ---------------------------------------------------------------------------
 def main() -> None:
-    global _current_provider, _current_language
+    global _current_provider, _current_language, _current_pause_mode
     init()
     config = _load_menu_config()
     has_language = _has_configured_language(config)
@@ -1007,6 +1110,8 @@ def main() -> None:
     _current_language = _normalize_language(config.get("language"))
     i18n_module.set_language(_current_language)
     _current_provider = _normalize_provider(config.get("provider"))
+    # 旧配置没写过 pause_mode 字段时，保持作家模式（停顿）。
+    _current_pause_mode = _normalize_pause_mode(config.get("pause_mode", True))
 
     if not has_language:
         _current_language = choose_language(_current_language)
@@ -1019,6 +1124,8 @@ def main() -> None:
         _current_provider = choose_provider(_current_provider)
         config["provider"] = _current_provider
 
+    config["pause_mode"] = _current_pause_mode
+
     if not has_language or not has_provider:
         _save_menu_config(config)
 
@@ -1030,20 +1137,22 @@ def main() -> None:
         )
         print_subheader(t("main.choose_feature"), color=C.PRIMARY)
         options = [
-            t("main.single_option"),
-            t("main.full_option"),
-            t("main.continue_option"),
-            t("main.steps_option"),
-            t("main.export_option"),
-            t("main.tools_option"),
-            t("main.delete_option"),
-            t("main.settings_option"),
-            t("main.exit_option"),
+            _main_option("🚀", t("main.full_option")),
+            _main_option("🎯", t("main.single_option")),
+            _main_option("🔁", t("main.continue_option")),
+            _main_option("📜", t("main.steps_option")),
+            _main_option("📦", t("main.export_option")),
+            _main_option("🧰", t("main.tools_option")),
+            _main_option("🗑️", t("main.delete_option")),
+            _main_option("⚙️", t("main.settings_option")),
+            _main_option("🌙", t("main.exit_option")),
         ]
-        idx = select(t("main.menu_prompt"), options, default=0)
+        idx = select(t("main.menu_prompt"), options, default=0, allow_escape=True)
+        if idx is None:
+            continue
         actions = [
-            single_step_mode,
             full_loop_mode,
+            single_step_mode,
             continue_mode,
             view_steps_list,
             export_mode,

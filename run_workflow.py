@@ -10,6 +10,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import cli as cli_module
 from i18n import t
@@ -23,6 +24,16 @@ from cli import (
     ask_genre, ask_novel_size, ask_project_name, ask_user_description, size_to_word_count,
 )
 from workflow_runner import STEP_NAMES, WorkflowRunner, step_name
+
+
+# 全局开关：是否在三方确认处真正停顿。菜单可传 --no-pause 关闭（作家模式 = 暂停，全自动模式 = 跳过）。
+_pause_at_confirmations: bool = True
+
+
+def _set_pause_at_confirmations(value: bool) -> None:
+    """供 main() 写入；_confirm_session() 读这个全局开关。"""
+    global _pause_at_confirmations
+    _pause_at_confirmations = bool(value)
 
 
 # ---------------------------------------------------------------------------
@@ -45,8 +56,19 @@ def _print_usage() -> None:
 # 统一工作流执行器：loop 和 continue 都从执行单元游标进入
 # ---------------------------------------------------------------------------
 
-OPENING_STEPS = ["06", "07", "08", "09", "10"]
-ROUND_STEPS = ["11", "12", "13", "14", "15"]
+# 开篇 12 步拆成两段独立 Claude 会话，避免单会话上下文超限：
+# - PLAN 段：策划/评审/写作指南，输出都是中等长度文本
+# - DRAFT 段：正文创作 + 质控循环 + 状态沉淀，09 输出的长正文会拖累后续 4 步
+OPENING_PLAN_STEPS = ["Q10", "06", "07", "Q4", "Q5", "Q6", "08"]
+OPENING_DRAFT_STEPS = ["09", "Q1", "Q2", "Q3", "10"]
+OPENING_STEPS = OPENING_PLAN_STEPS + OPENING_DRAFT_STEPS
+
+# 创作循环同样拆成两段：策划段出"剧情+指南"，生产段出"正文+质控+状态"。
+# step 16（故事梗概精简）依赖 15 的状态产物，归 DRAFT 会话但不在 ROUND_DRAFT_STEPS 里。
+ROUND_PLAN_STEPS = ["Q10", "11", "12", "Q4", "Q5", "Q6", "13"]
+ROUND_DRAFT_STEPS = ["14", "Q1", "Q2", "Q3", "15"]
+ROUND_STEPS = ROUND_PLAN_STEPS + ROUND_DRAFT_STEPS
+SHARED_QUALITY_STEPS = {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}
 
 
 @dataclass(frozen=True)
@@ -92,14 +114,57 @@ def _next_after_round(round_num: int, act_num: int, chapter_counts: list[int]) -
     located = _locate_round(round_num, chapter_counts)
     loop_idx = located[1] if located else 0
     if loop_idx + 1 < _loop_count_for_act(act_num, chapter_counts):
-        return _step_cursor("11", act_num=act_num, round_num=round_num + 1)
+        return _step_cursor("Q10", act_num=act_num, round_num=round_num + 1)
     return _step_cursor("17", act_num=act_num)
+
+
+def _next_opening_step(last_step: str) -> Optional[WorkflowCursor]:
+    """开篇两段子会话的下一步游标。
+
+    - PLAN 段（Q10→08）走完最后一步 08 → 切到 DRAFT 段首 09。
+    - DRAFT 段（09→10）走完最后一步 10 → 抽 story summary 收尾。
+
+    返回 None 表示 last_step 不在开篇序列里（由调用方决定走常规 round 分支）。
+    """
+    if last_step in OPENING_PLAN_STEPS:
+        idx = OPENING_PLAN_STEPS.index(last_step)
+        if idx + 1 < len(OPENING_PLAN_STEPS):
+            return _step_cursor(OPENING_PLAN_STEPS[idx + 1], act_num=1, round_num=1)
+        return _step_cursor("09", act_num=1, round_num=1)
+    if last_step in OPENING_DRAFT_STEPS:
+        idx = OPENING_DRAFT_STEPS.index(last_step)
+        if idx + 1 < len(OPENING_DRAFT_STEPS):
+            return _step_cursor(OPENING_DRAFT_STEPS[idx + 1], act_num=1, round_num=1)
+        return WorkflowCursor("create_story_summary", round_num=1)
+    return None
+
+
+def _next_round_step(last_step: str, round_num: int, act_num: int) -> Optional[WorkflowCursor]:
+    """创作循环两段子会话的下一步游标。
+
+    - PLAN 段（Q10→13）走完最后一步 13 → 切到 DRAFT 段首 14。
+    - DRAFT 段（14→15）走完最后一步 15 → 收尾：append_story_summary。
+    - step 16 在 DRAFT 会话里另起分支（见 compute_resume_cursor）。
+
+    返回 None 表示 last_step 不在该轮的循环序列里。
+    """
+    if last_step in ROUND_PLAN_STEPS:
+        idx = ROUND_PLAN_STEPS.index(last_step)
+        if idx + 1 < len(ROUND_PLAN_STEPS):
+            return _step_cursor(ROUND_PLAN_STEPS[idx + 1], act_num=act_num, round_num=round_num)
+        return _step_cursor("14", act_num=act_num, round_num=round_num)
+    if last_step in ROUND_DRAFT_STEPS:
+        idx = ROUND_DRAFT_STEPS.index(last_step)
+        if idx + 1 < len(ROUND_DRAFT_STEPS):
+            return _step_cursor(ROUND_DRAFT_STEPS[idx + 1], act_num=act_num, round_num=round_num)
+        return WorkflowCursor("append_story_summary", act_num=act_num, round_num=round_num)
+    return None
 
 
 def _next_after_act_end(act_num: int, chapter_counts: list[int]) -> WorkflowCursor:
     next_act = act_num + 1
     if next_act <= len(chapter_counts):
-        return _step_cursor("11", act_num=next_act, round_num=_first_round_for_act(next_act, chapter_counts))
+        return _step_cursor("Q10", act_num=next_act, round_num=_first_round_for_act(next_act, chapter_counts))
     return WorkflowCursor("done")
 
 
@@ -137,10 +202,22 @@ def compute_resume_cursor(runner, option_count: int) -> WorkflowCursor | None:
     if last_step == "04":
         return _step_cursor("05")
     if last_step == "05":
+        return _step_cursor("Q7")
+    if last_step == "Q7":
+        return _step_cursor("Q7R")
+    if last_step == "Q7R":
         return _step_cursor("05a")
     if last_step == "05a":
+        return _step_cursor("Q8")
+    if last_step == "Q8":
+        return _step_cursor("Q8R")
+    if last_step == "Q8R":
         return WorkflowCursor("extract_act_count")
     if last_step == "05b":
+        return _step_cursor("Q9", act_num=last_act or 1)
+    if last_step == "Q9":
+        return _step_cursor("Q9R", act_num=last_act or 1)
+    if last_step == "Q9R":
         act_count = info_obj.act_count
         if last_act is None:
             next_act = _infer_next_05b_act(runner)
@@ -151,23 +228,28 @@ def compute_resume_cursor(runner, option_count: int) -> WorkflowCursor | None:
         return WorkflowCursor("extract_chapter_counts")
     if last_step == "18":
         if last_phase == "post_05b" or (last_phase is None and not last_act):
-            return _step_cursor("06", act_num=1, round_num=1)
+            return _step_cursor("Q10", act_num=1, round_num=1)
         if last_phase == "post_17" or last_act:
             return _next_after_act_end(last_act or 1, chapter_counts)
         return None
+    if last_step in SHARED_QUALITY_STEPS:
+        if (last_round or 1) <= 1 and (last_act is None or last_act == 1):
+            cursor = _next_opening_step(last_step)
+            if cursor is not None:
+                return cursor
+        if last_act is None:
+            located = _locate_round(last_round, chapter_counts)
+            last_act = located[0] if located else 1
+        cursor = _next_round_step(last_step, last_round or 1, last_act)
+        if cursor is not None:
+            return cursor
     if last_step in OPENING_STEPS:
-        idx = OPENING_STEPS.index(last_step)
-        if idx + 1 < len(OPENING_STEPS):
-            return _step_cursor(OPENING_STEPS[idx + 1], act_num=1, round_num=1)
-        return WorkflowCursor("create_story_summary", round_num=1)
+        return _next_opening_step(last_step)
     if last_step in ROUND_STEPS:
         if last_act is None:
             located = _locate_round(last_round, chapter_counts)
             last_act = located[0] if located else 1
-        idx = ROUND_STEPS.index(last_step)
-        if idx + 1 < len(ROUND_STEPS):
-            return _step_cursor(ROUND_STEPS[idx + 1], act_num=last_act, round_num=last_round)
-        return WorkflowCursor("append_story_summary", act_num=last_act, round_num=last_round)
+        return _next_round_step(last_step, last_round or 1, last_act)
     if last_step == "16":
         if last_act is None:
             located = _locate_round(last_round, chapter_counts)
@@ -263,7 +345,6 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
     executor = WorkflowExecutor(runner, cursor)
     runner.project_info.update(option_count=option_count)
     creative_display_id = runner.make_display_id("creative_option")
-    act_display_id = runner.make_display_id("arc")
 
     print_section(t("workflow.session_creative"), color=C.PRIMARY)
     for option_index in range(1, option_count + 1):
@@ -311,7 +392,8 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
         _run_or_exit(executor.run_step(step, runner.make_display_id("world")), t("workflow.step_failed", step=step))
 
     print_section(t("workflow.session_axis"), color=C.PRIMARY)
-    for step in ["05", "05a"]:
+    act_display_id = runner.make_display_id("arc")
+    for step in ["05", "Q7", "Q7R", "05a", "Q8", "Q8R"]:
         _run_or_exit(executor.run_step(step, act_display_id), t("workflow.step_failed", step=step))
 
     def extract_act_count() -> bool:
@@ -325,6 +407,15 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
 
     _run_or_exit(executor.run_unit(WorkflowCursor("extract_act_count"), extract_act_count), t("workflow.extract_act_failed"))
 
+    print_section(t("workflow.session_axis_skeleton"), color=C.PRIMARY)
+    choice = _confirm_session("workflow.confirm_05b_loop_prompt")
+    if choice == "n":
+        info(t("workflow.paused"))
+        sys.exit(0)
+    if choice == "q":
+        info(t("workflow.user_quit"))
+        sys.exit(0)
+
     act_count = runner.project_info.act_count or 0
     if act_count:
         print_section(t("workflow.step_05b_loop", count=act_count), color=C.PRIMARY)
@@ -333,12 +424,21 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             line(color=C.DIM)
         if executor.started or executor._matches(_step_cursor("05b", act_num=act_num)):
             note(t("workflow.act_progress", act=act_num, total=act_count))
+        act_skeleton_display_id = runner.make_display_id(f"arc_act_{act_num}")
         _run_or_exit(
             executor.run_step(
-                "05b", act_display_id,
+                "05b", act_skeleton_display_id,
                 user_description=f"幕次{act_num}", act_num=act_num,
             ),
             t("workflow.step_05b_failed", act=act_num),
+        )
+        _run_or_exit(
+            executor.run_step("Q9", act_skeleton_display_id, act_num=act_num),
+            t("workflow.step_failed", step="Q9"),
+        )
+        _run_or_exit(
+            executor.run_step("Q9R", act_skeleton_display_id, act_num=act_num),
+            t("workflow.step_failed", step="Q9R"),
         )
 
     def extract_chapter_counts() -> bool:
@@ -369,10 +469,21 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
         info(t("workflow.user_quit"))
         sys.exit(0)
 
-    opening_display_id = runner.make_display_id("opening")
-    for step in OPENING_STEPS:
+    # 开篇拆成两个 Claude 会话：策划段 (Q10→08) 和生产段 (09→10)
+    # 详见 OPENING_PLAN_STEPS / OPENING_DRAFT_STEPS 的注释。
+    print_section(t("workflow.session_opening_plan"), color=C.PRIMARY)
+    opening_plan_display_id = runner.make_display_id("opening_plan")
+    for step in OPENING_PLAN_STEPS:
         _run_or_exit(
-            executor.run_step(step, opening_display_id, act_num=1, round_num=1),
+            executor.run_step(step, opening_plan_display_id, act_num=1, round_num=1),
+            t("workflow.step_failed", step=step),
+        )
+
+    print_section(t("workflow.session_opening_draft"), color=C.PRIMARY)
+    opening_draft_display_id = runner.make_display_id("opening_draft")
+    for step in OPENING_DRAFT_STEPS:
+        _run_or_exit(
+            executor.run_step(step, opening_draft_display_id, act_num=1, round_num=1),
             t("workflow.step_failed", step=step),
         )
 
@@ -403,9 +514,21 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
                 color=C.ACCENT,
             )
             session_name = runner.make_display_id(f"round_{round_num}")
-            for step in ROUND_STEPS:
+            # 创作循环拆成两个 Claude 会话：策划段 (Q10→13) 和生产段 (14→15→16)
+            # 详见 ROUND_PLAN_STEPS / ROUND_DRAFT_STEPS 的注释。
+            print_section(t("workflow.session_round_plan", round=round_num), color=C.PRIMARY)
+            round_plan_display_id = runner.make_display_id(f"round_{round_num}_plan")
+            for step in ROUND_PLAN_STEPS:
                 _run_or_exit(
-                    executor.run_step(step, session_name, act_num=act_num, round_num=round_num),
+                    executor.run_step(step, round_plan_display_id, act_num=act_num, round_num=round_num),
+                    t("workflow.step_failed", step=step),
+                )
+
+            print_section(t("workflow.session_round_draft", round=round_num), color=C.PRIMARY)
+            round_draft_display_id = runner.make_display_id(f"round_{round_num}_draft")
+            for step in ROUND_DRAFT_STEPS:
+                _run_or_exit(
+                    executor.run_step(step, round_draft_display_id, act_num=act_num, round_num=round_num),
                     t("workflow.step_failed", step=step),
                 )
 
@@ -418,7 +541,7 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             )
 
             _run_or_exit(
-                executor.run_step("16", session_name, act_num=act_num, round_num=round_num),
+                executor.run_step("16", round_draft_display_id, act_num=act_num, round_num=round_num),
                 t("workflow.step_16_failed"),
             )
 
@@ -460,17 +583,35 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
 
 
 # ---------------------------------------------------------------------------
-# 三方确认（开篇创作会话：y / n / q）
+# 三方确认（y=继续 / n=暂停 / q=退出）
 # ---------------------------------------------------------------------------
-def _confirm_open_session() -> str:
-    """开篇会话默认自动继续，不再停顿。
+def _confirm_session(prompt_key: str) -> str:
+    """通用三方确认：默认 y，真正读 stdin；n/q 由调用方决定如何处置。
 
-    历史上这里会停在 `y=继续 / n=暂停 / q=退出` 等待用户输入；现在改成
-    直接放行并打印一行提示，调用方后续的 n / q 分支成为死代码（保留无害）。
-    如需恢复交互式确认，把函数体换回原 `prompt(...)` 循环即可。
+    不同会话 / 阶段传不同的 i18n key 即可复用：
+        _confirm_session("workflow.confirm_open_session_prompt")
+        _confirm_session("workflow.confirm_05b_loop_prompt")
     """
-    info(t("workflow.auto_continue_opening"))
-    return "y"
+    # 全自动模式下：跳过交互、直接返回 y。
+    if not _pause_at_confirmations:
+        return "y"
+
+    valid = {"y", "n", "q", ""}
+
+    def _is_valid(value: str) -> bool:
+        return value.lower() in valid
+
+    raw = prompt(
+        t(prompt_key),
+        default="y",
+        validator=_is_valid,
+    )
+    return raw.lower() or "y"
+
+
+def _confirm_open_session() -> str:
+    """开篇会话三方确认（薄包装，调用方仍按 y / n / q 分支处理）。"""
+    return _confirm_session("workflow.confirm_open_session_prompt")
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +772,14 @@ def main() -> None:
                             help=t("argparse.novel_size_help"))
         parser.add_argument("--auto-select-option", type=int, default=None,
                             help="Non-interactive creative option index for full pipeline runs.")
+        pause_group = parser.add_mutually_exclusive_group()
+        pause_group.add_argument("--pause", dest="pause", action="store_true",
+                                 default=True, help=t("argparse.pause_help"))
+        pause_group.add_argument("--no-pause", dest="pause", action="store_false",
+                                 help=t("argparse.no_pause_help"))
         args = parser.parse_args(sys.argv[2:])
+
+        _set_pause_at_confirmations(args.pause)
 
         cli_module.set_language(args.language)
         genre = args.genre or ask_genre()
@@ -675,7 +823,14 @@ def main() -> None:
         parser.add_argument("--project-name", default=None, help=t("argparse.project_name_help"))
         parser.add_argument("--max-retries", type=int, default=3,
                             help=t("argparse.retry_help"))
+        pause_group = parser.add_mutually_exclusive_group()
+        pause_group.add_argument("--pause", dest="pause", action="store_true",
+                                 default=True, help=t("argparse.pause_help"))
+        pause_group.add_argument("--no-pause", dest="pause", action="store_false",
+                                 help=t("argparse.no_pause_help"))
         args = parser.parse_args(sys.argv[2:])
+
+        _set_pause_at_confirmations(args.pause)
 
         cli_module.set_language(args.language)
         project_name = args.project_name or ask_project_name()

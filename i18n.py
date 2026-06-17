@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+from app_paths import resource_path
 
-_ROOT = Path(__file__).parent / "i18n"
+_ROOT = resource_path("i18n")
 _DEFAULT_LANGUAGE = "zh"
 _current_language = _DEFAULT_LANGUAGE
 _cache: Dict[str, Dict[str, Any]] = {}

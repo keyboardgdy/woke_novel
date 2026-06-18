@@ -106,6 +106,12 @@ STEP_NAMES = {
     "Q10": "章节上下文包生成",
 }
 
+CLAUDE_CREATIVE_STEPS = {"01"}
+CLAUDE_DRAFT_STEPS = {"09", "14", "Q2"}
+CLAUDE_WORKFLOW_STEPS = CLAUDE_CREATIVE_STEPS | CLAUDE_DRAFT_STEPS
+CODEX_WORKFLOW_PROVIDER = "codex"
+CLAUDE_DRAFT_SESSION_NAME = "drafting_claude"
+
 
 def step_name(step: str) -> str:
     return t(f"step_name.{step}", default=STEP_NAMES.get(step, step))
@@ -381,6 +387,15 @@ class WorkflowRunner:
         if normalized not in {"claude", "codex"}:
             raise ValueError(t("runner.unsupported_provider", provider=provider))
         return normalized
+
+    @staticmethod
+    def _provider_for_step(step: str) -> str:
+        """流程架构路由：创意生成、正文创作与章节定向重写走 Claude，其余走 Codex。"""
+        return "claude" if step in CLAUDE_WORKFLOW_STEPS else CODEX_WORKFLOW_PROVIDER
+
+    def _draft_display_id(self) -> str:
+        """所有正文创作/Q2 共用同一个 Claude 会话，失败重试才切新会话。"""
+        return self.make_display_id(CLAUDE_DRAFT_SESSION_NAME)
 
     def execute_step(self, step: str, prompt: str, display_id: str,
                      session_uuid: str = None, resume: bool = False) -> Optional[subprocess.CompletedProcess]:
@@ -1205,34 +1220,43 @@ class WorkflowRunner:
                  session_uuid: str = None, option_index: int = None,
                  user_description: str = "", ref_works: str = None,
                  act_num: int = None, phase: Optional[str] = None,
-                 novel_size: str = None, target_word_count: int = None) -> bool:
+                 novel_size: str = None, target_word_count: int = None,
+                 provider_override: str = None) -> bool:
         """运行单个步骤（三层流程）"""
+        original_provider = self.provider
+        original_bucket = self._session_bucket
+        effective_provider = self._normalize_provider(provider_override or self._provider_for_step(step))
+        self.provider = effective_provider
+        self._session_bucket = self._session_uuids.setdefault(effective_provider, {})
+
         if display_id is None:
             display_id = self.make_display_id(step)
-
-        # 同一 display_id 应该在同一个 session 中(在当前 provider 桶里查找)
-        # 首次使用该 display_id -> 创建新会话
-        # 后续使用同一 display_id -> --resume 恢复会话
-        # 桶里命中但格式不属于当前 provider(脏数据) -> 清掉并 warn
-        bucket = self._session_bucket
-        if display_id in bucket and self._id_matches_provider(display_id, bucket[display_id]):
-            session_uuid = bucket[display_id]
-            is_resume = True
-        else:
-            stale = bucket.pop(display_id, None)
-            if stale:
-                warn(t("runner.session_stale_dropped",
-                       provider=self.provider, display_id=display_id,
-                       stale=stale[:8]))
-                self.project_info.update(session_uuids=self._session_uuids)
-            session_uuid = str(uuid.uuid4()) if self.provider == "claude" else None
-            if self.provider == "claude":
-                self._persist_session_uuid(display_id, session_uuid)
-            self._session_counter += 1
-            self._session_number_map[display_id] = self._session_counter
-            is_resume = False
+        if step in CLAUDE_DRAFT_STEPS:
+            display_id = self._draft_display_id()
 
         try:
+            # 同一 display_id 应该在同一个 session 中(在当前 provider 桶里查找)
+            # 首次使用该 display_id -> 创建新会话
+            # 后续使用同一 display_id -> --resume 恢复会话
+            # 桶里命中但格式不属于当前 provider(脏数据) -> 清掉并 warn
+            bucket = self._session_bucket
+            if display_id in bucket and self._id_matches_provider(display_id, bucket[display_id]):
+                session_uuid = bucket[display_id]
+                is_resume = True
+            else:
+                stale = bucket.pop(display_id, None)
+                if stale:
+                    warn(t("runner.session_stale_dropped",
+                           provider=self.provider, display_id=display_id,
+                           stale=stale[:8]))
+                    self.project_info.update(session_uuids=self._session_uuids)
+                session_uuid = str(uuid.uuid4()) if self.provider == "claude" else None
+                if self.provider == "claude":
+                    self._persist_session_uuid(display_id, session_uuid)
+                self._session_counter += 1
+                self._session_number_map[display_id] = self._session_counter
+                is_resume = False
+
             # 第一层：加载模板
             template = self.load_step_template(step)
 
@@ -1270,6 +1294,9 @@ class WorkflowRunner:
         except Exception as e:
             error(t("runner.step_exception", step=step, error=e))
             return False
+        finally:
+            self.provider = original_provider
+            self._session_bucket = original_bucket
 
     def run_session_block(self, block_name: str, steps: List[str], act_num: int = None) -> bool:
         """在一个会话中顺序执行一组步骤"""

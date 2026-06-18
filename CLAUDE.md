@@ -43,16 +43,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 流水线与会话分组
 
-完整流水线（`run_workflow.py loop`）按 Claude session 切片：
+完整流水线（`run_workflow.py loop`）按混合 provider session 切片：创意生成步骤 `01` 使用 Claude 的 `novel_<proj>_creative_option` 会话；正文创作步骤 `09` / `14` 以及 `Q2` 统一走 Claude，同一个 `novel_<proj>_drafting_claude` 会话贯穿全部章节；其他步骤走 Codex，按原阶段/轮次 display_id 切片。Claude 正文会话只有在失败重试的最后一次或会话失效时才会切新会话。
 
 | 会话 | 步骤 | display_id 模式 | 备注 |
 | --- | --- | --- | --- |
-| 1 创意 | 01（×option_count 循环）→ 02 | `novel_<proj>_creative_option` | 选完后用 `extract_novel_name_from_creative` 抽书名并 `rename_project` 把目录改成最终小说名 |
+| 1 创意 | 01（×option_count 循环）→ 02 | Claude: `novel_<proj>_creative_option`; Codex: `novel_<proj>_creative_option` | 01 走 Claude 生成多个创意方案；02 走 Codex 补充选中方案；选完后用 `extract_novel_name_from_creative` 抽书名并 `rename_project` 把目录改成最终小说名 |
 | 2 世界/人物 | 03 → 04 | `novel_<proj>_world` | |
 | 3 主轴 | 05 → Q7 → Q7R → 05a → Q8 → Q8R，随后 05b → Q9 → Q9R（每幕一次），再 18（`post_05b`） | `novel_<proj>_arc`；每幕骨架用 `novel_<proj>_arc_act_<n>` | Q7R/Q8R/Q9R 是门禁重构步骤，会覆盖对应主轴/幕次/骨架产物；Q8R 后调 `extract_act_count_from_macro_model` 拿幕数；05b 全部跑完调 `extract_all_chapter_counts` 拿每幕章节数和总章节数，并写回 `.project_info.json` |
-| 4a 开篇策划 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 | `novel_<proj>_opening_plan` | act_num=1；08 之后切到 4b 会话 |
-| 4b 开篇正文 | 09 → Q1 → Q2 → Q3 → 10 | `novel_<proj>_opening_draft` | act_num=1；10 之后 `extract_and_create_story_summary(1)` |
-| 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → Q3 → 15 → 16（每轮一轮） | `novel_<proj>_round_<n>_plan` + `novel_<proj>_round_<n>_draft` | 第一幕章节数 -1 次（开篇已用掉一章），其余幕 `act_chapters` 次；15 在 DRAFT session，16 在 DRAFT session 内紧跟其后 |
+| 4 开篇 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 → 09 → Q1 → Q2 → Q3 → 10 | Codex: `novel_<proj>_opening`; Claude: `novel_<proj>_drafting_claude` | act_num=1；09/Q2 走 Claude 正文会话，其余走 Codex；10 之后 `extract_and_create_story_summary(1)` |
+| 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → Q3 → 15 → 16（每轮一轮） | Codex: `novel_<proj>_round_<n>`; Claude: `novel_<proj>_drafting_claude` | 第一幕章节数 -1 次（开篇已用掉一章），其余幕 `act_chapters` 次；14/Q2 走同一个 Claude 正文会话，其余走 Codex，16 紧跟 15 后在同一 round session 内执行 |
 | 幕末 | 17，随后 18（`post_17`） | `novel_<proj>_act_<n>` | act 循环结束后跑一次；17 后用同一 act 会话刷新 `projects/<name>/CLAUDE.md`，最后 `sync_summary_to_state` 写回末轮状态文档 |
 
 > 模板目录里另有 `steps/04a 更新人物档案与人物关系.md` 和 `steps/00 进阶提示技术.md` 两份文件，但都不在 `run_workflow.py loop` 的主循环里——前者是手动按需增量更新人物 JSON 的工具步骤，后者是早期探索残留；如要把它们纳入 `STEP_FILES` / `STEP_FILE_MAP` 需同步改两处。`steps/18 项目级 CLAUDE.md.md` 由 `run_workflow.py` 在 05b / 17 后**自动**调用（不需要用户在 `loop` 阶段手动触发），失败仅打印警告不阻断流程。
@@ -73,7 +72,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 单步模式下若 `step == "01" 且 option_count > 1`，菜单会自动循环 01 然后再调 02，无需手动 `session` 编排。
 - 可视化控制台（管理项目 / 跑流程 / 读章节 / 看日志 / 导 EPUB）：先 `cd frontend && npm install && npm run build` 构建一次，再 `python -m app_server.main`（或 Windows 上一键 `woke`）开 `http://127.0.0.1:8787`。后端是 FastAPI（`app_server/main.py`），配套 `app_server/STEP_NAMES` / `STEP_ORDER` / `STAGES` 三张静态表给前端展示用。
 
-执行前置：系统 PATH 上需要所选 provider 对应的 CLI（`claude`/`claude.cmd` 或 `codex`/`codex.cmd`）。`--dry` 下可以省略。`--provider` 缺省 `claude`，`--language` 缺省 `zh`，`--novel-size` 缺省 `中篇`（30 万字；四档固定为 短篇 10 万 / 中篇 30 万 / 长篇 50 万 / 超长篇 100 万，定义在 `cli.py:51` 的 `NOVEL_SIZES`）。
+执行前置：完整流程需要系统 PATH 上同时有 `claude`/`claude.cmd` 和 `codex`/`codex.cmd`，因为流程会按步骤混用两者；`--dry` 下可以省略。`--provider` 仍保留为兼容参数，但完整编排会按步骤路由：创意生成(01)、正文创作(09/14)和章节定向重写(Q2)用 Claude，其余用 Codex。`--language` 缺省 `zh`，`--novel-size` 缺省 `中篇`（30 万字；四档固定为 短篇 10 万 / 中篇 30 万 / 长篇 50 万 / 超长篇 100 万，定义在 `cli.py:51` 的 `NOVEL_SIZES`）。
 
 ## 项目目录结构
 

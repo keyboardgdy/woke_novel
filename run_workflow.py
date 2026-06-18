@@ -56,15 +56,14 @@ def _print_usage() -> None:
 # 统一工作流执行器：loop 和 continue 都从执行单元游标进入
 # ---------------------------------------------------------------------------
 
-# 开篇 12 步拆成两段独立 Claude 会话，避免单会话上下文超限：
-# - PLAN 段：策划/评审/写作指南，输出都是中等长度文本
-# - DRAFT 段：正文创作 + 质控循环 + 状态沉淀，09 输出的长正文会拖累后续 4 步
+# 开篇按策划/正文两段显示进度。provider 路由在 WorkflowRunner 内统一处理：
+# 创意生成走 Claude 的创意会话；正文创作/Q2 走同一个 Claude 正文会话，其余步骤走 Codex。
 OPENING_PLAN_STEPS = ["Q10", "06", "07", "Q4", "Q5", "Q6", "08"]
 OPENING_DRAFT_STEPS = ["09", "Q1", "Q2", "Q3", "10"]
 OPENING_STEPS = OPENING_PLAN_STEPS + OPENING_DRAFT_STEPS
 
-# 创作循环同样拆成两段：策划段出"剧情+指南"，生产段出"正文+质控+状态"。
-# step 16（故事梗概精简）依赖 15 的状态产物，归 DRAFT 会话但不在 ROUND_DRAFT_STEPS 里。
+# 创作循环也按策划/正文两段显示进度。
+# step 16（故事梗概精简）依赖 15 的状态产物，紧跟在同一 round 会话内执行。
 ROUND_PLAN_STEPS = ["Q10", "11", "12", "Q4", "Q5", "Q6", "13"]
 ROUND_DRAFT_STEPS = ["14", "Q1", "Q2", "Q3", "15"]
 ROUND_STEPS = ROUND_PLAN_STEPS + ROUND_DRAFT_STEPS
@@ -119,10 +118,10 @@ def _next_after_round(round_num: int, act_num: int, chapter_counts: list[int]) -
 
 
 def _next_opening_step(last_step: str) -> Optional[WorkflowCursor]:
-    """开篇两段子会话的下一步游标。
+    """开篇流程的下一步游标。
 
-    - PLAN 段（Q10→08）走完最后一步 08 → 切到 DRAFT 段首 09。
-    - DRAFT 段（09→10）走完最后一步 10 → 抽 story summary 收尾。
+    - 策划段（Q10→08）走完最后一步 08 → 进入正文段首 09。
+    - 正文段（09→10）走完最后一步 10 → 抽 story summary 收尾。
 
     返回 None 表示 last_step 不在开篇序列里（由调用方决定走常规 round 分支）。
     """
@@ -140,11 +139,11 @@ def _next_opening_step(last_step: str) -> Optional[WorkflowCursor]:
 
 
 def _next_round_step(last_step: str, round_num: int, act_num: int) -> Optional[WorkflowCursor]:
-    """创作循环两段子会话的下一步游标。
+    """创作循环的下一步游标。
 
-    - PLAN 段（Q10→13）走完最后一步 13 → 切到 DRAFT 段首 14。
-    - DRAFT 段（14→15）走完最后一步 15 → 收尾：append_story_summary。
-    - step 16 在 DRAFT 会话里另起分支（见 compute_resume_cursor）。
+    - 策划段（Q10→13）走完最后一步 13 → 进入正文段首 14。
+    - 正文段（14→15）走完最后一步 15 → 收尾：append_story_summary。
+    - step 16 在同一 round 会话里另起分支（见 compute_resume_cursor）。
 
     返回 None 表示 last_step 不在该轮的循环序列里。
     """
@@ -469,21 +468,19 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
         info(t("workflow.user_quit"))
         sys.exit(0)
 
-    # 开篇拆成两个 Claude 会话：策划段 (Q10→08) 和生产段 (09→10)
-    # 详见 OPENING_PLAN_STEPS / OPENING_DRAFT_STEPS 的注释。
+    # 开篇策划段使用 Codex session；09/Q2 会被运行器路由到全局 Claude 正文会话。
+    opening_display_id = runner.make_display_id("opening")
     print_section(t("workflow.session_opening_plan"), color=C.PRIMARY)
-    opening_plan_display_id = runner.make_display_id("opening_plan")
     for step in OPENING_PLAN_STEPS:
         _run_or_exit(
-            executor.run_step(step, opening_plan_display_id, act_num=1, round_num=1),
+            executor.run_step(step, opening_display_id, act_num=1, round_num=1),
             t("workflow.step_failed", step=step),
         )
 
     print_section(t("workflow.session_opening_draft"), color=C.PRIMARY)
-    opening_draft_display_id = runner.make_display_id("opening_draft")
     for step in OPENING_DRAFT_STEPS:
         _run_or_exit(
-            executor.run_step(step, opening_draft_display_id, act_num=1, round_num=1),
+            executor.run_step(step, opening_display_id, act_num=1, round_num=1),
             t("workflow.step_failed", step=step),
         )
 
@@ -513,22 +510,19 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
                 t("workflow.round_section", act=act_num, index=loop_idx + 1, total=loop_count, round=round_num),
                 color=C.ACCENT,
             )
-            session_name = runner.make_display_id(f"round_{round_num}")
-            # 创作循环拆成两个 Claude 会话：策划段 (Q10→13) 和生产段 (14→15→16)
-            # 详见 ROUND_PLAN_STEPS / ROUND_DRAFT_STEPS 的注释。
+            # 每轮策划段使用 Codex session；14/Q2 会被运行器路由到全局 Claude 正文会话。
+            round_display_id = runner.make_display_id(f"round_{round_num}")
             print_section(t("workflow.session_round_plan", round=round_num), color=C.PRIMARY)
-            round_plan_display_id = runner.make_display_id(f"round_{round_num}_plan")
             for step in ROUND_PLAN_STEPS:
                 _run_or_exit(
-                    executor.run_step(step, round_plan_display_id, act_num=act_num, round_num=round_num),
+                    executor.run_step(step, round_display_id, act_num=act_num, round_num=round_num),
                     t("workflow.step_failed", step=step),
                 )
 
             print_section(t("workflow.session_round_draft", round=round_num), color=C.PRIMARY)
-            round_draft_display_id = runner.make_display_id(f"round_{round_num}_draft")
             for step in ROUND_DRAFT_STEPS:
                 _run_or_exit(
-                    executor.run_step(step, round_draft_display_id, act_num=act_num, round_num=round_num),
+                    executor.run_step(step, round_display_id, act_num=act_num, round_num=round_num),
                     t("workflow.step_failed", step=step),
                 )
 
@@ -541,7 +535,7 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             )
 
             _run_or_exit(
-                executor.run_step("16", round_draft_display_id, act_num=act_num, round_num=round_num),
+                executor.run_step("16", round_display_id, act_num=act_num, round_num=round_num),
                 t("workflow.step_16_failed"),
             )
 

@@ -106,7 +106,7 @@ STEP_NAMES = {
     "Q10": "章节上下文包生成",
 }
 
-CLAUDE_CREATIVE_STEPS = {"01"}
+CLAUDE_CREATIVE_STEPS = {"01", "02"}
 CLAUDE_DRAFT_STEPS = {"09", "14", "Q2"}
 CLAUDE_WORKFLOW_STEPS = CLAUDE_CREATIVE_STEPS | CLAUDE_DRAFT_STEPS
 CODEX_WORKFLOW_PROVIDER = "codex"
@@ -392,6 +392,14 @@ class WorkflowRunner:
     def _provider_for_step(step: str) -> str:
         """流程架构路由：创意生成、正文创作与章节定向重写走 Claude，其余走 Codex。"""
         return "claude" if step in CLAUDE_WORKFLOW_STEPS else CODEX_WORKFLOW_PROVIDER
+
+    def _provider_for_context(self, step: str, display_id: str, provider_override: str = None) -> str:
+        """根据步骤和会话上下文决定 CLI 后端。"""
+        if provider_override:
+            return self._normalize_provider(provider_override)
+        if display_id in {self.make_display_id("arc"), self.make_display_id("arc_act")}:
+            return "claude"
+        return self._provider_for_step(step)
 
     def _draft_display_id(self) -> str:
         """所有正文创作/Q2 共用同一个 Claude 会话，失败重试才切新会话。"""
@@ -1225,14 +1233,15 @@ class WorkflowRunner:
         """运行单个步骤（三层流程）"""
         original_provider = self.provider
         original_bucket = self._session_bucket
-        effective_provider = self._normalize_provider(provider_override or self._provider_for_step(step))
-        self.provider = effective_provider
-        self._session_bucket = self._session_uuids.setdefault(effective_provider, {})
 
         if display_id is None:
             display_id = self.make_display_id(step)
         if step in CLAUDE_DRAFT_STEPS:
             display_id = self._draft_display_id()
+
+        effective_provider = self._provider_for_context(step, display_id, provider_override)
+        self.provider = effective_provider
+        self._session_bucket = self._session_uuids.setdefault(effective_provider, {})
 
         try:
             # 同一 display_id 应该在同一个 session 中(在当前 provider 桶里查找)

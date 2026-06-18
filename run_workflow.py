@@ -423,7 +423,7 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
             line(color=C.DIM)
         if executor.started or executor._matches(_step_cursor("05b", act_num=act_num)):
             note(t("workflow.act_progress", act=act_num, total=act_count))
-        act_skeleton_display_id = runner.make_display_id(f"arc_act_{act_num}")
+        act_skeleton_display_id = runner.make_display_id("arc_act")
         _run_or_exit(
             executor.run_step(
                 "05b", act_skeleton_display_id,

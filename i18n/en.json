@@ -443,7 +443,7 @@
   "structure.rename_failed": "Rename failed: {error}",
   "structure.usage": "Usage: python project_structure.py <project_name> [root_dir]",
   "structure.created_plain": "\nProject structure created: {path}",
-  "runner.instruction_prefix": "## Instructions\nExecute the task immediately. Do not ask follow-up questions. Analyze, then execute, then compress; do not skip any stage.\n\nCompression: review your answer and remove every sentence that does not contribute to the core result.\n\nPrioritize content quality and information density over quantity.\n\nPath rule: do not modify any write path. Output paths must exactly match the specified paths. Target folders already exist; write directly to the specified paths.\n\n---\n\n",
+  "runner.instruction_prefix": "## Positioning\nThis project writes **web fiction**: serialized stories read chapter by chapter on a phone, not a literary novel meant to be read straight through. Every step's output is judged by one standard — will it keep the reader reading on?\n\n## Instructions\nExecute the task immediately. Do not ask follow-up questions. Analyze, then execute, then compress; do not skip any stage.\n\nCompression: review your answer and remove every sentence that does not contribute to the core result.\n\nPrioritize content quality and information density over quantity.\n\nPath rule: do not modify any write path. Output paths must exactly match the specified paths. Target folders already exist; write directly to the specified paths.\n\n---\n\n",
   "step_name.Q7R": "Story Axis Appeal Rewrite",
   "step_name.Q8R": "Act Framework Appeal Rewrite",
   "step_name.Q9R": "Act Skeleton Appeal Rewrite"

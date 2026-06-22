@@ -18,6 +18,30 @@ RULES_ROOT = resource_path("steps")
 RULES_ROOT_EN = resource_path("steps_en")
 
 
+def _format_word_count(words: int) -> str:
+    if words < 10_000:
+        return f"{words}字"
+    if words % 10_000 == 0:
+        return f"{words // 10_000}万字"
+    return f"{words / 10_000:g}万字"
+
+
+def _format_target_words(size_label: str, words: int, language: str) -> str:
+    if language == "en":
+        ranges = {
+            "超短篇": "8,000-20,000 words",
+            "中短篇": "25,000-80,000 words",
+            "Flash fiction": "8,000-20,000 words",
+            "Short novella": "25,000-80,000 words",
+        }
+        return ranges.get(size_label, f"{words:,} words")
+    ranges = {
+        "超短篇": "8千-2万字",
+        "中短篇": "2.5万-8万字",
+    }
+    return ranges.get(size_label, _format_word_count(words))
+
+
 # 步骤到文件的映射
 STEP_FILE_MAP = {
     "01": "01 创意方案生成.md",
@@ -148,15 +172,17 @@ class PathResolver:
         size_label = novel_size or self.novel_size or "中篇"
         if self.language == "en":
             size_label = {
+                "超短篇": "Flash fiction",
+                "中短篇": "Short novella",
                 "短篇": "Short novel",
                 "中篇": "Medium-length novel",
                 "长篇": "Long novel",
                 "超长篇": "Very long novel",
             }.get(size_label, size_label)
         result = result.replace("{novel_size}", size_label)
-        # 渲染成中文「X万字」，方便人读；底层整数还是 target_word_count
+        # 渲染成方便人读的字数文本；底层整数还是 target_word_count
         _wc = target_word_count or self.target_word_count or 300_000
-        target_words = f"{_wc:,} words" if self.language == "en" else f"{_wc // 10_000}万字"
+        target_words = _format_target_words(size_label, _wc, self.language)
         result = result.replace("{target_word_count}", target_words)
         result = result.replace("{act_num}", str(kwargs.get("act_num") or ""))
         act_num = kwargs.get("act_num")

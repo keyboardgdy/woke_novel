@@ -65,14 +65,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `python menu.py`（Windows 还可以 `menu.bat`）— 交互式菜单：单步 / 完整 / 继续 / 步骤列表。所有路径都从脚本所在目录推。
 - `python run_workflow.py <command> [args]` — CLI 入口：
   - `init` — 交互式建项目（询问题材 `genre`、项目名 `novel_name`、规模档 `novel_size`）。
-  - `loop --project-name <name> --genre <g> [--provider claude|codex] [--option-count 3] [--language zh|en] [--novel-size 短篇|中篇|长篇|超长篇] [--dry]` — 跑完整流水线。
+  - `loop --project-name <name> --genre <g> [--provider claude|codex] [--option-count 3] [--language zh|en] [--novel-size 超短篇|中短篇|短篇|中篇|长篇|超长篇] [--dry]` — 跑完整流水线。
   - `continue --project-name <name> [--provider ...] [--language ...] [--dry]` — 从 `.project_info.json` 的 `last_step` 续跑。
   - `single <step> -p <name> -g <g> [--provider ...] [--language ...] [--max-retries N] [--dry]` — 跑单个步骤。
   - `session <block> <step1,step2,...> -p <name> -g <g> [--provider ...] [--language ...] [--dry]` — 在一个 CLI session 里顺序跑一组步骤。
 - 单步模式下若 `step == "01" 且 option_count > 1`，菜单会自动循环 01 然后再调 02，无需手动 `session` 编排。
 - 可视化控制台（管理项目 / 跑流程 / 读章节 / 看日志 / 导 EPUB）：先 `cd frontend && npm install && npm run build` 构建一次，再 `python -m app_server.main`（或 Windows 上一键 `woke`）开 `http://127.0.0.1:8787`。后端是 FastAPI（`app_server/main.py`），配套 `app_server/STEP_NAMES` / `STEP_ORDER` / `STAGES` 三张静态表给前端展示用。
 
-执行前置：完整流程需要系统 PATH 上同时有 `claude`/`claude.cmd` 和 `codex`/`codex.cmd`，因为流程会按步骤混用两者；`--dry` 下可以省略。`--provider` 仍保留为兼容参数，但完整编排会按步骤路由：创意生成(01)、正文创作(09/14)和章节定向重写(Q2)用 Claude，其余用 Codex。`--language` 缺省 `zh`，`--novel-size` 缺省 `中篇`（30 万字；四档固定为 短篇 10 万 / 中篇 30 万 / 长篇 50 万 / 超长篇 100 万，定义在 `cli.py:51` 的 `NOVEL_SIZES`）。
+执行前置：完整流程需要系统 PATH 上同时有 `claude`/`claude.cmd` 和 `codex`/`codex.cmd`，因为流程会按步骤混用两者；`--dry` 下可以省略。`--provider` 仍保留为兼容参数，但完整编排会按步骤路由：创意生成(01)、正文创作(09/14)和章节定向重写(Q2)用 Claude，其余用 Codex。`--language` 缺省 `zh`，`--novel-size` 缺省 `中篇`（30 万字；档位定义在 `cli.py:52` 的 `NOVEL_SIZES`，包含超短篇 8千-2万字、中短篇 2.5万-8万字、短篇 10 万、中篇 30 万、长篇 50 万、超长篇 100 万）。
 
 ## 项目目录结构
 

@@ -21,7 +21,8 @@ from ui import (
     print_panel, print_section, prompt, select, success, warn,
 )
 from cli import (
-    ask_genre, ask_novel_size, ask_project_name, ask_user_description, size_to_word_count,
+    ask_genre, ask_novel_size, ask_project_name, ask_user_description,
+    format_word_count, size_to_word_count,
 )
 from workflow_runner import STEP_NAMES, WorkflowRunner, step_name
 
@@ -694,7 +695,7 @@ def main() -> None:
         print_kv([
             (t("workflow.init_project"), runner.project_name),
             (t("workflow.init_genre"), runner.genre),
-            (t("workflow.init_size"), t("full.config_size", size=novel_size, words=target_word_count // 10_000).split(None, 1)[-1]),
+            (t("workflow.init_size"), t("full.config_size", size=novel_size, words=format_word_count(target_word_count)).split(None, 1)[-1]),
             (t("workflow.init_project_dir"), str(runner.path_resolver.project_root)),
         ])
         sys.exit(0)
@@ -790,7 +791,7 @@ def main() -> None:
         print_banner(
             t("workflow.banner_project", project=runner.project_name),
             subtitle=t("workflow.banner_subtitle", genre=runner.genre, size=novel_size,
-                       words=target_word_count // 10_000, provider=runner.provider,
+                       words=format_word_count(target_word_count), provider=runner.provider,
                        path=runner.path_resolver.project_root),
         )
 

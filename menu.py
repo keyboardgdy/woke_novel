@@ -631,7 +631,7 @@ def full_loop_mode() -> None:
         t("full.config_project", project=project),
         t("full.config_genre", genre=genre),
         t("full.config_description", description=user_description),
-        t("full.config_size", size=novel_size, words=target_word_count // 10_000),
+        t("full.config_size", size=novel_size, words=cli_module.format_word_count(target_word_count)),
         t("full.config_options", count=option_count),
         t("full.config_language", language=_language_label()),
         t("full.config_provider", provider=_provider_label()),

@@ -103,10 +103,14 @@ STAGES = [
 ]
 
 SIZE_WORDS = {
+    "超短篇": 20_000,
+    "中短篇": 80_000,
     "短篇": 80_000,
     "中篇": 300_000,
     "长篇": 800_000,
     "超长篇": 1_500_000,
+    "Flash fiction": 20_000,
+    "Short novella": 80_000,
     "Short novel": 80_000,
     "Medium-length novel": 300_000,
     "Long novel": 800_000,

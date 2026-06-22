@@ -47,15 +47,51 @@ def _presets_path() -> Path:
 # ---------------------------------------------------------------------------
 # 小说规模档位
 # ---------------------------------------------------------------------------
-# 4 档固定：10万 / 30万 / 50万 / 100万 字。供 ask_novel_size() 选择；
+# 6 档固定：超短篇 / 中短篇 / 短篇 / 中篇 / 长篇 / 超长篇。供 ask_novel_size() 选择；
 # 也供 workflow_runner / path_resolver 在 prompt 中以 {novel_size} 形式引用。
-NOVEL_SIZES: List[Tuple[str, int]] = [
-    ("短篇",   100_000),   # 10万字
-    ("中篇",   300_000),   # 30万字
-    ("长篇",   500_000),   # 50万字
-    ("超长篇", 1_000_000), # 100万字
+NOVEL_SIZES: List[Tuple[str, int, str]] = [
+    ("超短篇",  20_000, "8千-2万字"),
+    ("中短篇",  80_000, "2.5万-8万字"),
+    ("短篇",   100_000, "10万字"),
+    ("中篇",   300_000, "30万字"),
+    ("长篇",   500_000, "50万字"),
+    ("超长篇", 1_000_000, "100万字"),
 ]
-_SIZE_LABEL_TO_WORDS = {label: words for label, words in NOVEL_SIZES}
+_SIZE_LABEL_TO_WORDS = {item[0]: item[1] for item in NOVEL_SIZES}
+_SIZE_LABEL_TO_WORDS.update({
+    "Flash fiction": 20_000,
+    "Short novella": 80_000,
+    "Short novel": 100_000,
+    "Medium-length novel": 300_000,
+    "Long novel": 500_000,
+    "Very long novel": 1_000_000,
+})
+_SIZE_LABEL_TO_EN_DISPLAY = {
+    "超短篇": "8,000-20,000 words",
+    "中短篇": "25,000-80,000 words",
+    "短篇": "100,000 words",
+    "中篇": "300,000 words",
+    "长篇": "500,000 words",
+    "超长篇": "1,000,000 words",
+}
+
+
+def format_word_count(words: int, language: str | None = None) -> str:
+    language = language or _current_language
+    if language == "en":
+        return f"{words:,} words"
+    if words < 10_000:
+        return f"{words}字"
+    if words % 10_000 == 0:
+        return f"{words // 10_000}万字"
+    return f"{words / 10_000:g}万字"
+
+
+def format_size_words(size_item: Tuple[str, int, str], language: str | None = None) -> str:
+    language = language or _current_language
+    if language == "en":
+        return _SIZE_LABEL_TO_EN_DISPLAY.get(size_item[0], format_word_count(size_item[1], language))
+    return size_item[2]
 
 
 def _load_presets() -> dict:
@@ -233,19 +269,19 @@ def ask_user_description() -> str:
 # 小说规模
 # ---------------------------------------------------------------------------
 def ask_novel_size() -> str:
-    """询问小说规模档位（短篇/中篇/长篇/超长篇），返回中文档名。
+    """询问小说规模档位，返回中文档名。
 
-    4 档固定对应 10万 / 30万 / 50万 / 100万 字，详见 NOVEL_SIZES。
-    通过 select 数字选 1-4，默认 2（中篇）。
+    档位详见 NOVEL_SIZES。通过 select 数字选择，默认中篇。
     """
     init()
     print_subheader(t("size.title"), color=C.PRIMARY)
     items: List[Tuple[int, str, str]] = [
-        (i + 1, t(f"size.{label}", default=label), t("size.words", words=words // 10_000))
-        for i, (label, words) in enumerate(NOVEL_SIZES)
+        (i + 1, t(f"size.{item[0]}", default=item[0]), format_size_words(item))
+        for i, item in enumerate(NOVEL_SIZES)
     ]
     print_choices_table(items, title=t("size.choose_title"), allow_custom=False)
-    raw = prompt(t("common.choose"), default="2").strip()
+    default_index = next((i + 1 for i, item in enumerate(NOVEL_SIZES) if item[0] == "中篇"), 4)
+    raw = prompt(t("common.choose"), default=str(default_index)).strip()
     if not raw.isdigit():
         warn(t("size.invalid_default", value=raw))
         return "中篇"
@@ -253,11 +289,12 @@ def ask_novel_size() -> str:
     if not (0 <= idx < len(NOVEL_SIZES)):
         warn(t("size.invalid_default", value=raw))
         return "中篇"
-    label, words = NOVEL_SIZES[idx]
-    info(t("size.selected", label=t(f"size.{label}", default=label), words=words // 10_000))
+    item = NOVEL_SIZES[idx]
+    label = item[0]
+    info(t("size.selected", label=t(f"size.{label}", default=label), words=format_size_words(item)))
     return label
 
 
 def size_to_word_count(size_label: str) -> int:
-    """把规模档名（中/短/长/超长篇）映射到目标字数。未知档名兜底 30 万。"""
+    """把规模档名映射到目标字数。区间档位使用上限，未知档名兜底 30 万。"""
     return _SIZE_LABEL_TO_WORDS.get(size_label, 300_000)

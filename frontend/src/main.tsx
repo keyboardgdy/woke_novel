@@ -175,6 +175,8 @@ class AppErrorBoundary extends React.Component<{ children: ReactNode }, { error:
 }
 
 const NOVEL_SIZE_OPTIONS = [
+  { value: "超短篇", label: "超短篇", words: "约 8 千-2 万字" },
+  { value: "中短篇", label: "中短篇", words: "约 2.5 万-8 万字" },
   { value: "短篇", label: "短篇", words: "约 8 万字" },
   { value: "中篇", label: "中篇", words: "约 30 万字" },
   { value: "长篇", label: "长篇", words: "约 80 万字" },

@@ -948,7 +948,10 @@ def print_done(project: Optional[str] = None, extra: Optional[str] = None) -> No
 
 def press_enter() -> None:
     """按回车继续。"""
-    Prompt.ask(f"  {I.DASH * 2} {tr('ui.press_enter')}", default="", show_default=False, console=_console)
+    try:
+        Prompt.ask(f"  {I.DASH * 2} {tr('ui.press_enter')}", default="", show_default=False, console=_console)
+    except EOFError:
+        return
 
 
 def pause(msg: Optional[str] = None) -> None:

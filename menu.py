@@ -234,7 +234,8 @@ def _show_model_cli_environment_check(selected_provider: Optional[str] = None) -
             return f"{label}: OK - {detail}"
         return f"{label}: MISSING - {status['message']}"
 
-    selected_status = statuses[selected]
+    required_commands = ("claude", "codex") if selected == "mixed" else (selected,)
+    selected_available = all(statuses[command]["available"] for command in required_commands)
     any_available = any(status["available"] for status in statuses.values())
     if _current_language == "en":
         title = "Environment Check"
@@ -244,15 +245,23 @@ def _show_model_cli_environment_check(selected_provider: Optional[str] = None) -
             f"{status_line('claude')}\n"
             f"{status_line('codex')}"
         )
-        if selected_status["available"]:
+        if selected_available:
             body = summary + "\n\nThe selected backend is ready."
             color = C.SUCCESS
         elif any_available:
-            body = (
-                summary
-                + f"\n\nThe selected backend is not installed or not in PATH. You can switch to an installed backend in Settings, or install {selected_name}:\n\n"
-                + _provider_install_help(selected)
-            )
+            if selected == "mixed":
+                missing = [command for command in required_commands if not statuses[command]["available"]]
+                body = (
+                    summary
+                    + "\n\nMixed architecture needs both Claude CLI and Codex CLI. Install the missing backend(s) before running the full workflow:\n\n"
+                    + "\n\n".join(_provider_install_help(command) for command in missing)
+                )
+            else:
+                body = (
+                    summary
+                    + f"\n\nThe selected backend is not installed or not in PATH. You can switch to an installed backend in Settings, or install {selected_name}:\n\n"
+                    + _provider_install_help(selected)
+                )
             color = C.WARNING
         else:
             body = (
@@ -271,15 +280,23 @@ def _show_model_cli_environment_check(selected_provider: Optional[str] = None) -
             f"{status_line('claude')}\n"
             f"{status_line('codex')}"
         )
-        if selected_status["available"]:
+        if selected_available:
             body = summary + "\n\n已选后端可用。"
             color = C.SUCCESS
         elif any_available:
-            body = (
-                summary
-                + f"\n\n已选后端未安装或未加入 PATH。你可以在系统设置里切换到已安装后端，或安装 {selected_name}：\n\n"
-                + _provider_install_help(selected)
-            )
+            if selected == "mixed":
+                missing = [command for command in required_commands if not statuses[command]["available"]]
+                body = (
+                    summary
+                    + "\n\n混合架构需要 Claude CLI 和 Codex CLI 都可用。完整运行工作流前，请安装缺失的后端：\n\n"
+                    + "\n\n".join(_provider_install_help(command) for command in missing)
+                )
+            else:
+                body = (
+                    summary
+                    + f"\n\n已选后端未安装或未加入 PATH。你可以在系统设置里切换到已安装后端，或安装 {selected_name}：\n\n"
+                    + _provider_install_help(selected)
+                )
             color = C.WARNING
         else:
             body = (
@@ -292,7 +309,7 @@ def _show_model_cli_environment_check(selected_provider: Optional[str] = None) -
             color = C.ERROR
 
     print_panel(title, body, color=color, icon=I.WARN if color != C.SUCCESS else I.OK)
-    return bool(selected_status["available"])
+    return bool(selected_available)
 
 
 def _language_label(language: Optional[str] = None) -> str:

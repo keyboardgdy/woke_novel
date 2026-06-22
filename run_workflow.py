@@ -56,7 +56,7 @@ def _print_usage() -> None:
 # 统一工作流执行器：loop 和 continue 都从执行单元游标进入
 # ---------------------------------------------------------------------------
 
-# 开篇按策划/正文两段显示进度。provider 路由在 WorkflowRunner 内统一处理：
+# 开篇按策划/正文两段显示进度。mixed 架构下的 provider 路由在 WorkflowRunner 内统一处理：
 # 创意生成走 Claude 的创意会话；正文创作/Q2 走同一个 Claude 正文会话，其余步骤走 Codex。
 OPENING_PLAN_STEPS = ["Q10", "06", "07", "Q4", "Q5", "Q6", "08"]
 OPENING_DRAFT_STEPS = ["09", "Q1", "Q2", "Q3", "10"]
@@ -626,7 +626,7 @@ def main() -> None:
         parser.add_argument("-g", "--genre", default="都市")
         parser.add_argument("-p", "--project-name", default="test_project")
         parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
-        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+        parser.add_argument("--provider", choices=["claude", "codex", "mixed"], default="mixed",
                             help=t("argparse.provider_help"))
         parser.add_argument("--language", choices=["zh", "en"], default="zh",
                             help=t("argparse.language_help"))
@@ -656,7 +656,7 @@ def main() -> None:
         parser.add_argument("-g", "--genre", default="都市")
         parser.add_argument("-p", "--project-name", default="test_project")
         parser.add_argument("--dry", action="store_true")
-        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+        parser.add_argument("--provider", choices=["claude", "codex", "mixed"], default="mixed",
                             help=t("argparse.provider_help"))
         parser.add_argument("--language", choices=["zh", "en"], default="zh",
                             help=t("argparse.language_help"))
@@ -703,7 +703,7 @@ def main() -> None:
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
-        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+        parser.add_argument("--provider", choices=["claude", "codex", "mixed"], default="mixed",
                             help=t("argparse.provider_help"))
         parser.add_argument("--language", choices=["zh", "en"], default="zh",
                             help=t("argparse.language_help"))
@@ -751,7 +751,7 @@ def main() -> None:
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
-        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+        parser.add_argument("--provider", choices=["claude", "codex", "mixed"], default="mixed",
                             help=t("argparse.provider_help"))
         parser.add_argument("--language", choices=["zh", "en"], default="zh",
                             help=t("argparse.language_help"))
@@ -810,7 +810,7 @@ def main() -> None:
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument("--dry", action="store_true", help=t("argparse.dry_help"))
-        parser.add_argument("--provider", choices=["claude", "codex"], default="claude",
+        parser.add_argument("--provider", choices=["claude", "codex", "mixed"], default="mixed",
                             help=t("argparse.provider_help"))
         parser.add_argument("--language", choices=["zh", "en"], default="zh",
                             help=t("argparse.language_help"))

@@ -37,6 +37,8 @@ import "./styles.css";
 
 const API = "/api/v1";
 
+type Provider = "claude" | "codex" | "mixed";
+
 type Page = "projects" | "workbench" | "assets" | "chapters" | "export" | "logs" | "settings";
 
 type ProjectSummary = {
@@ -44,7 +46,7 @@ type ProjectSummary = {
   novel_name: string | null;
   genre: string;
   language: "zh" | "en";
-  provider: "claude" | "codex";
+  provider: Provider;
   status: string;
   run_source?: "api" | "cli" | string | null;
   run_pid?: number | null;
@@ -763,7 +765,7 @@ function CreateProjectDialog({ existingProjects, onClose }: { existingProjects: 
     project_name: "",
     genre: "都市",
     language: "zh",
-    provider: "claude",
+    provider: "mixed" as Provider,
     novel_size: "中篇",
     option_count: 3,
     dry_run: false,
@@ -897,7 +899,7 @@ function CreateProjectDialog({ existingProjects, onClose }: { existingProjects: 
               <span>控制模型后端、创意方案数量和是否立即运行。</span>
             </div>
             <div className="form-grid">
-              <label>后端<select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}><option value="claude">Claude CLI</option><option value="codex">Codex CLI</option></select></label>
+              <label>系统架构<select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value as Provider })}><option value="claude">Claude CLI</option><option value="codex">Codex CLI</option><option value="mixed">混合架构</option></select></label>
               <label>创意方案数<input type="number" min={1} max={10} value={form.option_count} onChange={(e) => setForm({ ...form, option_count: Number(e.target.value) })} /></label>
               <label>
                 运行模式
@@ -984,7 +986,7 @@ function WorkbenchPage({
   });
   const [fullRun, setFullRun] = useState({
     language: "zh",
-    provider: "claude",
+    provider: "mixed" as Provider,
     dry_run: false,
     pause: true,
     option_count: 3,
@@ -1405,7 +1407,7 @@ function WorkbenchPage({
               <div><span>题材</span><strong>{info?.genre || "未知题材"}</strong></div>
               <div><span>规模</span><strong>{info?.novel_size || "未设置"}</strong></div>
               <div><span>语言</span><strong>{info?.language === "en" ? "English" : "中文"}</strong></div>
-              <div><span>后端</span><strong>{info?.provider || "claude"}</strong></div>
+              <div><span>架构</span><strong>{info?.provider || "mixed"}</strong></div>
               <div><span>创意方案数</span><strong>{info?.option_count || fullRun.option_count}</strong></div>
               <div><span>自动选择</span><strong>{info?.auto_select_option || info?.selected_option || "未设置"}</strong></div>
               <div><span>运行模式</span><strong>{(typeof info?.pause === "boolean" ? info.pause : fullRun.pause) ? "作家模式" : "全自动模式"}</strong></div>
@@ -1807,7 +1809,7 @@ function SettingsPage({ environment }: { environment: any }) {
         <h2><Settings size={18} /> 基础设置</h2>
         <div className="kv-list">
           <span>语言</span><strong>{settings.data?.language}</strong>
-          <span>默认后端</span><strong>{settings.data?.provider}</strong>
+          <span>默认架构</span><strong>{settings.data?.provider}</strong>
           <span>工作目录</span><strong>{settings.data?.workspace}</strong>
           <span>配置文件</span><strong>{settings.data?.config_file}</strong>
         </div>

@@ -110,6 +110,7 @@ CLAUDE_CREATIVE_STEPS = {"01", "02"}
 CLAUDE_DRAFT_STEPS = {"09", "14", "Q2"}
 CLAUDE_WORKFLOW_STEPS = CLAUDE_CREATIVE_STEPS | CLAUDE_DRAFT_STEPS
 CODEX_WORKFLOW_PROVIDER = "codex"
+SUPPORTED_ARCHITECTURES = {"claude", "codex", "mixed"}
 CLAUDE_DRAFT_SESSION_NAME = "drafting_claude"
 
 
@@ -196,7 +197,7 @@ class WorkflowRunner:
     def __init__(self, project_name: str, genre: str = "都市", dry_run: bool = False,
                  auto_create: bool = True, max_retries: int = 3,
                  novel_size: str = "中篇", target_word_count: int = 300_000,
-                 provider: str = "claude", language: str = "zh"):
+                 provider: str = "mixed", language: str = "zh"):
         self.project_name = project_name
         self.genre = genre
         self.dry_run = dry_run
@@ -263,14 +264,8 @@ class WorkflowRunner:
                 "claude": dict(raw_sessions.get("claude", {}) or {}),
                 "codex":  dict(raw_sessions.get("codex",  {}) or {}),
             }
-        # 切到当前 provider 后,如对方桶残留,打条 info 让用户心里有数。
-        other_provider = "codex" if self.provider == "claude" else "claude"
-        other_count = len(self._session_uuids.get(other_provider, {}))
-        if other_count:
-            note(t("runner.cross_provider_sessions_detected",
-                   count=other_count, other_provider=other_provider,
-                   current_provider=self.provider))
-        self._session_bucket = self._session_uuids.setdefault(self.provider, {})
+        active_provider = self.provider if self.provider in {"claude", "codex"} else "claude"
+        self._session_bucket = self._session_uuids.setdefault(active_provider, {})
         self._run_status_path = PROJECTS_ROOT / self.project_name / ".run_status.json"
         self._run_status_token = uuid.uuid4().hex
         self._write_run_status()
@@ -382,24 +377,28 @@ class WorkflowRunner:
 
     @staticmethod
     def _normalize_provider(provider: str) -> str:
-        """规范化 CLI 后端名称。"""
-        normalized = (provider or "claude").strip().lower()
-        if normalized not in {"claude", "codex"}:
+        """规范化系统架构名称。"""
+        normalized = (provider or "mixed").strip().lower()
+        if normalized not in SUPPORTED_ARCHITECTURES:
             raise ValueError(t("runner.unsupported_provider", provider=provider))
         return normalized
 
     @staticmethod
-    def _provider_for_step(step: str) -> str:
+    def _mixed_provider_for_step(step: str) -> str:
         """流程架构路由：创意生成、正文创作与章节定向重写走 Claude，其余走 Codex。"""
         return "claude" if step in CLAUDE_WORKFLOW_STEPS else CODEX_WORKFLOW_PROVIDER
 
     def _provider_for_context(self, step: str, display_id: str, provider_override: str = None) -> str:
         """根据步骤和会话上下文决定 CLI 后端。"""
         if provider_override:
-            return self._normalize_provider(provider_override)
+            override = self._normalize_provider(provider_override)
+            if override in {"claude", "codex"}:
+                return override
+        if self.provider in {"claude", "codex"}:
+            return self.provider
         if display_id in {self.make_display_id("arc"), self.make_display_id("arc_act")}:
             return "claude"
-        return self._provider_for_step(step)
+        return self._mixed_provider_for_step(step)
 
     def _draft_display_id(self) -> str:
         """所有正文创作/Q2 共用同一个 Claude 会话，失败重试才切新会话。"""

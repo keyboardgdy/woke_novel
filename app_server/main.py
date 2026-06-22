@@ -48,6 +48,8 @@ PROJECT_DIRS = [
     "04_characters",
 ]
 
+Provider = Literal["claude", "codex", "mixed"]
+
 STEP_NAMES = {
     "01": "创意方案生成",
     "02": "创意方案补充",
@@ -130,7 +132,7 @@ class ProjectCreateRequest(BaseModel):
     project_name: str
     genre: str = "都市"
     language: Literal["zh", "en"] = "zh"
-    provider: Literal["claude", "codex"] = "claude"
+    provider: Provider = "mixed"
     novel_size: str = "中篇"
     target_word_count: int | None = None
     user_description: str = ""
@@ -152,7 +154,7 @@ class CreativeOptionSelectRequest(BaseModel):
 
 class SettingsPatch(BaseModel):
     language: Literal["zh", "en"] | None = None
-    provider: Literal["claude", "codex"] | None = None
+    provider: Provider | None = None
     default_dry_run: bool | None = None
     max_retries: int | None = Field(default=None, ge=1, le=20)
 
@@ -160,7 +162,7 @@ class SettingsPatch(BaseModel):
 class RunRequest(BaseModel):
     genre: str | None = None
     language: Literal["zh", "en"] = "zh"
-    provider: Literal["claude", "codex"] = "claude"
+    provider: Provider = "mixed"
     dry_run: bool = False
     option_count: int = Field(default=3, ge=1, le=10)
     auto_select_option: int = Field(default=1, ge=1, le=10)
@@ -290,7 +292,7 @@ def load_settings() -> dict[str, Any]:
     data = read_json(CONFIG_FILE, {})
     return {
         "language": data.get("language", "zh"),
-        "provider": data.get("provider", "claude"),
+        "provider": data.get("provider", "mixed"),
         "workspace": str(WORKSPACE),
         "projects_root": str(PROJECTS_ROOT),
         "logs_root": str(LOGS_ROOT),

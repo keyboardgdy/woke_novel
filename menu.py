@@ -45,18 +45,18 @@ from i18n import t
 # 一次菜单会话内只可能问一次，所以单变量够用。
 _pending_user_description: Optional[str] = None
 _pending_novel_size: Optional[str] = None
-_current_provider: str = "claude"
+_current_provider: str = "mixed"
 _current_language: str = "zh"
 # 默认作家模式（停顿）。用户在设置里可切换为全自动模式（--no-pause）。
 _current_pause_mode: bool = True
 CONFIG_FILE = runtime_path(".menu_config.json")
-SUPPORTED_PROVIDERS = ("claude", "codex")
+SUPPORTED_PROVIDERS = ("claude", "codex", "mixed")
 SUPPORTED_LANGUAGES = ("zh", "en")
 
 
 def _normalize_provider(provider: Optional[str]) -> str:
-    value = (provider or "claude").strip().lower()
-    return value if value in SUPPORTED_PROVIDERS else "claude"
+    value = (provider or "mixed").strip().lower()
+    return value if value in SUPPORTED_PROVIDERS else "mixed"
 
 
 def _normalize_language(language: Optional[str]) -> str:
@@ -141,8 +141,12 @@ def _save_configured_pause_mode(pause_mode: bool) -> bool:
 
 
 def _provider_label(provider: Optional[str] = None) -> str:
-    value = (provider or _current_provider or "claude").lower()
-    return "Codex CLI" if value == "codex" else "Claude CLI"
+    value = (provider or _current_provider or "mixed").lower()
+    if value == "claude":
+        return "Claude CLI"
+    if value == "codex":
+        return "Codex CLI"
+    return "混合架构" if _current_language == "zh" else "Mixed"
 
 
 def _command_status(command: str) -> Dict[str, Any]:
@@ -334,13 +338,14 @@ def choose_provider(default_provider: Optional[str] = None) -> str:
         [
             t("provider.claude_option"),
             t("provider.codex_option"),
+            t("provider.mixed_option"),
         ],
-        default=1 if default_value == "codex" else 0,
+        default={"claude": 0, "codex": 1, "mixed": 2}.get(default_value, 2),
         allow_escape=True,
     )
     if idx is None:
         return default_value
-    return "codex" if idx == 1 else "claude"
+    return ("claude", "codex", "mixed")[idx]
 
 
 def choose_pause_mode(default_pause_mode: Optional[bool] = None) -> bool:

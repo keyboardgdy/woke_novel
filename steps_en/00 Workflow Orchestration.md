@@ -16,7 +16,7 @@ After all Step 05b runs are complete, run Step 18 with `phase=post_05b` to gener
 
 Session 4
 
-Run Step 06 Opening Plot Direction Extraction, outputting `Plot_Direction_v1.md`. Run Step 07 Opening Chapter Synopsis, outputting `Plot_v1.md`. Run Steps Q4/Q5/Q6 for plot appeal review, plot rewrite, and hook-ledger update. Run Step 08 Opening Writing Guide, outputting `Writing_Guide_v1.md`. Run Step 09 Opening Chapter Draft, outputting `Draft_v1.md`. Run Steps Q1/Q2/Q3 for chapter quality review, targeted rewrite, and style-memory update. Run Step 10 State Document, outputting `State_v1.md`.
+Run Step 06 Opening Plot Direction Extraction, outputting `Plot_Direction_v1.md`. Run Step 07 Opening Chapter Synopsis, outputting `Plot_v1.md`. Run Steps Q4/Q5/Q6 for plot appeal review, plot rewrite, and hook-ledger update. Run Step 08 Opening Writing Guide, outputting `Writing_Guide_v1.md`. Run Step 09 Opening Chapter Draft, outputting `Draft_v1.md`. Run Steps Q1/Q2 for chapter quality review and targeted rewrite. Run Step 10 State Document, outputting `State_v1.md`.
 
 After the opening chapter is complete, use `extract_and_create_story_summary` to write the first chapter synopsis into the initial version of `{state}/Story_Summary.md`.
 
@@ -24,7 +24,7 @@ Creation Loop (rounds start from 2)
 
 Iterate by act and chapter count. Each act has a specified number of chapters. Since the opening chapter of Act 1 is already complete, Act 1 loops `act_chapters - 1` times. Other acts loop `act_chapters` times.
 
-Each round runs: Step 11 Plot Direction Guidance, outputting `Plot_Direction_v{round}.md`; Step 12 Plot Synopsis Design, outputting `Plot_v{round}.md`; Steps Q4/Q5/Q6 for plot appeal review, plot rewrite, and hook-ledger update; Step 13 Writing Guide, outputting `Writing_Guide_v{round}.md`; Step 14 Chapter Draft, outputting `Draft_v{round}.md`; Steps Q1/Q2/Q3 for chapter quality review, targeted rewrite, and style-memory update; Step 15 State Document, outputting `State_v{round}.md`; Step 16 Story Summary Compression, run immediately after 15 inside the round session, outputting to `{state}/Story_Summary.md`. Then `sync_summary_to_state` writes the compressed version back into the final state document for the round, `State_v{round}.md`.
+Each round runs: Step 11 Plot Direction Guidance, outputting `Plot_Direction_v{round}.md`; Step 12 Plot Synopsis Design, outputting `Plot_v{round}.md`; Steps Q4/Q5/Q6 for plot appeal review, plot rewrite, and hook-ledger update; Step 13 Writing Guide, outputting `Writing_Guide_v{round}.md`; Step 14 Chapter Draft, outputting `Draft_v{round}.md`; Steps Q1/Q2 for chapter quality review and targeted rewrite; Step 15 State Document, outputting `State_v{round}.md`; Step 16 Story Summary Compression, run immediately after 15 inside the round session, outputting to `{state}/Story_Summary.md`. Then `sync_summary_to_state` writes the compressed version back into the final state document for the round, `State_v{round}.md`.
 
 After an act is complete, run Step 17 Act-Level Story Summary Compression, outputting to `{state}/Story_Summary.md`, and use `sync_summary_to_state` to write it back into the final state document of the act. Then run Step 18 with `phase=post_17` to refresh the project-root `CLAUDE.md`.
 
@@ -87,7 +87,7 @@ After an act is complete, run Step 17 Act-Level Story Summary Compression, outpu
 | Q4/Q5/Q6 | {quality}/{plots} | Plot_Appeal_Review_v1.md, Plot_Appeal_Rewrite_Note_v1.md, Plot_Hook_Ledger.md |
 | 08 | {guides} | Writing_Guide_v1.md |
 | 09 | {output} | Draft_v1.md |
-| Q1/Q2/Q3 | {quality}/{output} | Chapter_Quality_Review_v1.md, Rewrite_Note_v1.md, Style_Memory.md |
+| Q1/Q2 | {quality}/{output} | Chapter_Quality_Review_v1.md, Rewrite_Note_v1.md |
 | 10 | {state} | State_v1.md |
 
 > After Step 10, `extract_and_create_story_summary` initializes `{state}/Story_Summary.md` from the first chapter synopsis.

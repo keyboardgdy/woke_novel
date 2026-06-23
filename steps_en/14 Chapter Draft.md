@@ -20,6 +20,12 @@ The chapter prose must satisfy:
 - Do not compress core dramatic turns, character relationship change, key foreshadowing, or the chapter-ending hook.
 - Do not add new events, side explanations, or empty lyricism just to hit the character count.
 
+**Draft-session continuity priority**:
+- If prior session memory conflicts with this round's plot, writing guide, or chapter context pack, this round's files override it.
+- Prior session memory may only preserve character voice, prose feel, and relationship aftertaste. Do not inherit outdated location, outdated relationship state, resolved hooks, or temporary instructions from older chapters.
+- Do not reuse the previous chapter's opening structure, conflict-entry pattern, or ending-hook shape unless the writing guide explicitly asks for an echo.
+- If a familiar move appears only because the previous chapter used it, replace it with an entry that fits this chapter's actual situation.
+
 ## Creative Core
 
 This is not "repeating the plot."

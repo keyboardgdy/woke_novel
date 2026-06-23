@@ -107,7 +107,7 @@ STEP_NAMES = {
 }
 
 CLAUDE_CREATIVE_STEPS = {"01", "02"}
-CLAUDE_DRAFT_STEPS = {"09", "14", "Q2"}
+CLAUDE_DRAFT_STEPS = {"09", "14"}
 CLAUDE_WORKFLOW_STEPS = CLAUDE_CREATIVE_STEPS | CLAUDE_DRAFT_STEPS
 CODEX_WORKFLOW_PROVIDER = "codex"
 SUPPORTED_ARCHITECTURES = {"claude", "codex", "mixed"}
@@ -385,7 +385,7 @@ class WorkflowRunner:
 
     @staticmethod
     def _mixed_provider_for_step(step: str) -> str:
-        """流程架构路由：创意生成、正文创作与章节定向重写走 Claude，其余走 Codex。"""
+        """流程架构路由：创意生成和正文创作走 Claude，其余走 Codex。"""
         return "claude" if step in CLAUDE_WORKFLOW_STEPS else CODEX_WORKFLOW_PROVIDER
 
     def _provider_for_context(self, step: str, display_id: str, provider_override: str = None) -> str:
@@ -400,10 +400,10 @@ class WorkflowRunner:
             return "claude"
         return self._mixed_provider_for_step(step)
 
-    def _draft_display_id(self) -> str:
-        """所有正文创作/Q2 共用同一个 Claude 会话，失败重试才切新会话。"""
-        return self.make_display_id(CLAUDE_DRAFT_SESSION_NAME)
-
+    def _draft_display_id(self, act_num: int = None) -> str:
+        """正文创作按幕共用 Claude 会话，跨幕自动切新会话。"""
+        suffix = f"act_{act_num}" if act_num is not None else "act_unknown"
+        return self.make_display_id(f"{CLAUDE_DRAFT_SESSION_NAME}_{suffix}")
     def execute_step(self, step: str, prompt: str, display_id: str,
                      session_uuid: str = None, resume: bool = False) -> Optional[subprocess.CompletedProcess]:
         """第三层：调用外部 CLI 后端执行
@@ -1234,9 +1234,11 @@ class WorkflowRunner:
         original_bucket = self._session_bucket
 
         if display_id is None:
-            display_id = self.make_display_id(step)
+            # Q2 consumes Q1's diagnosis and should stay in the same Codex review session,
+            # while 09/14 keep their separate per-act Claude drafting session for prose continuity.
+            display_id = self.make_display_id("Q1" if step == "Q2" else step)
         if step in CLAUDE_DRAFT_STEPS:
-            display_id = self._draft_display_id()
+            display_id = self._draft_display_id(act_num)
 
         effective_provider = self._provider_for_context(step, display_id, provider_override)
         self.provider = effective_provider

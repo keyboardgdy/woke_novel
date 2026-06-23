@@ -266,8 +266,8 @@ python run_workflow.py continue -p my_novel
 | 1 创意 | 01×N → 02 | `_creative_option` | 01 走 Claude 生成 `00_baseline/创意方案_{n}.md`；02 补充选中方案 + 抽书名 + `rename_project` |
 | 2 世界/人物 | 03 → 04 | `_world` | `世界观.md` + `04_characters/*.json` |
 | 3 主轴 | 05 → 05a → 05b×act → 18 | `_arc` | `故事主轴.md` + `幕次框架.md` + `核心骨架_{n}.md` + `CLAUDE.md` |
-| 4 开篇 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 → 09 → Q1 → Q2 → Q3 → 10 | `_opening` (act=1) | 章节上下文包 + 剧情/指南 + `正文v1.md` + `状态v1.md` |
-| 5 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → Q3 → 15 → 16 | `_round_<n>` | 章节上下文包 + 剧情 + 写作指南 + `正文v<n>.md` + `状态v<n>.md` + 精简 `故事总梗概.md` |
+| 4 开篇 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 → 09 → Q1 → Q2 → 10 | `_opening` (act=1) | 章节上下文包 + 剧情/指南 + `正文v1.md` + `状态v1.md` |
+| 5 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → 15 → 16 | `_round_<n>` | 章节上下文包 + 剧情 + 写作指南 + `正文v<n>.md` + `状态v<n>.md` + 精简 `故事总梗概.md` |
 | 6 幕末 | 17 → 18 | `_act_<n>` | 末轮 `状态vN.md` + 刷新 `projects/<name>/CLAUDE.md` |
 
 ---

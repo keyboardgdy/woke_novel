@@ -58,17 +58,17 @@ def _print_usage() -> None:
 # ---------------------------------------------------------------------------
 
 # 开篇按策划/正文两段显示进度。mixed 架构下的 provider 路由在 WorkflowRunner 内统一处理：
-# 创意生成走 Claude 的创意会话；正文创作/Q2 走同一个 Claude 正文会话，其余步骤走 Codex。
+# 创意生成走 Claude 的创意会话；正文创作按幕走 Claude 正文会话；Q2 跟 Q1 走同一个 Codex 质量会话。
 OPENING_PLAN_STEPS = ["Q10", "06", "07", "Q4", "Q5", "Q6", "08"]
-OPENING_DRAFT_STEPS = ["09", "Q1", "Q2", "Q3", "10"]
+OPENING_DRAFT_STEPS = ["09", "Q1", "Q2", "10"]
 OPENING_STEPS = OPENING_PLAN_STEPS + OPENING_DRAFT_STEPS
 
 # 创作循环也按策划/正文两段显示进度。
 # step 16（故事梗概精简）依赖 15 的状态产物，紧跟在同一 round 会话内执行。
 ROUND_PLAN_STEPS = ["Q10", "11", "12", "Q4", "Q5", "Q6", "13"]
-ROUND_DRAFT_STEPS = ["14", "Q1", "Q2", "Q3", "15"]
+ROUND_DRAFT_STEPS = ["14", "Q1", "Q2", "15"]
 ROUND_STEPS = ROUND_PLAN_STEPS + ROUND_DRAFT_STEPS
-SHARED_QUALITY_STEPS = {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}
+SHARED_QUALITY_STEPS = {"Q1", "Q2", "Q4", "Q5", "Q6"}
 
 
 @dataclass(frozen=True)
@@ -232,6 +232,13 @@ def compute_resume_cursor(runner, option_count: int) -> WorkflowCursor | None:
         if last_phase == "post_17" or last_act:
             return _next_after_act_end(last_act or 1, chapter_counts)
         return None
+    if last_step == "Q3":
+        if (last_round or 1) <= 1 and (last_act is None or last_act == 1):
+            return _step_cursor("10", act_num=1, round_num=1)
+        if last_act is None:
+            located = _locate_round(last_round, chapter_counts)
+            last_act = located[0] if located else 1
+        return _step_cursor("15", act_num=last_act, round_num=last_round or 1)
     if last_step in SHARED_QUALITY_STEPS:
         if (last_round or 1) <= 1 and (last_act is None or last_act == 1):
             cursor = _next_opening_step(last_step)
@@ -243,7 +250,7 @@ def compute_resume_cursor(runner, option_count: int) -> WorkflowCursor | None:
         cursor = _next_round_step(last_step, last_round or 1, last_act)
         if cursor is not None:
             return cursor
-    if last_step in OPENING_STEPS:
+    if last_step in OPENING_STEPS and (last_round or 1) <= 1 and (last_act is None or last_act == 1):
         return _next_opening_step(last_step)
     if last_step in ROUND_STEPS:
         if last_act is None:
@@ -469,7 +476,7 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
         info(t("workflow.user_quit"))
         sys.exit(0)
 
-    # 开篇策划段使用 Codex session；09/Q2 会被运行器路由到全局 Claude 正文会话。
+    # 开篇策划段使用 Codex session；09 会被运行器路由到第 1 幕 Claude 正文会话，Q2 留在 Q1 的 Codex 质量会话。
     opening_display_id = runner.make_display_id("opening")
     print_section(t("workflow.session_opening_plan"), color=C.PRIMARY)
     for step in OPENING_PLAN_STEPS:
@@ -511,7 +518,7 @@ def run_workflow_from_cursor(runner, cursor: WorkflowCursor = None, option_count
                 t("workflow.round_section", act=act_num, index=loop_idx + 1, total=loop_count, round=round_num),
                 color=C.ACCENT,
             )
-            # 每轮策划段使用 Codex session；14/Q2 会被运行器路由到全局 Claude 正文会话。
+            # 每轮策划段使用 Codex session；14 会被运行器路由到当前幕 Claude 正文会话，Q2 留在 Q1 的 Codex 质量会话。
             round_display_id = runner.make_display_id(f"round_{round_num}")
             print_section(t("workflow.session_round_plan", round=round_num), color=C.PRIMARY)
             for step in ROUND_PLAN_STEPS:

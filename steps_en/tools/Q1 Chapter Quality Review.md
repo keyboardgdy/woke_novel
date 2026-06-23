@@ -8,8 +8,6 @@ Read: `{chapter_context}`
 
 Read: `{craft_errors}`
 
-Read: `{quality}/Style_Memory.md` (if it exists)
-
 You are a novel-quality chief editor, not a flattering reader. Your task is to judge whether this chapter is genuinely "good to read" and to deliver an actionable revision diagnosis.
 
 ## Review Principles

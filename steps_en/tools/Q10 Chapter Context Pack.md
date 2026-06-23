@@ -24,8 +24,6 @@ Read: `{evolution}`
 
 Read: `{baseline}/Creative_Proposal_{option_index}.md`
 
-Read: `{quality}/Style_Memory.md` (if it exists)
-
 You are the context editor for a long-form serialized novel. Your task is not to generate plot. Your task is to create a lightweight, accurate, directly usable "chapter context pack" for Chapter {round}.
 
 This step exists so that the later plot design, review, writing guide, drafting, quality review, and rewrite steps can read this file first instead of repeatedly reading the Story Axis, Act Framework, Core Skeleton, Worldbuilding, Character Profiles, and Relationship Matrix.
@@ -148,8 +146,8 @@ Description: {user_description}
 
 - This chapter's recommended rhythm position (from rhythm_state):
 - This chapter's suitable emotional texture:
-- Previous two chapters' opening / conflict types (from style memory, for anti-repetition):
-- Style taboos already沉淀 (from style memory banned_patterns):
+- Previous two chapters' opening / conflict types (infer from previous state, previous plot, and existing drafts for anti-repetition):
+- Prose degeneration this chapter should avoid (infer from the writing guide, creative constitution, and problems visible in existing drafts):
 - High-risk degeneration this chapter:
 - Key points for downstream steps reading this file:
 ```

@@ -50,8 +50,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 1 创意 | 01（×option_count 循环）→ 02 | Claude: `novel_<proj>_creative_option` | 01 走 Claude 生成多个创意方案；02 也走 Claude 补充选中方案；选完后用 `extract_novel_name_from_creative` 抽书名并 `rename_project` 把目录改成最终小说名 |
 | 2 世界/人物 | 03 → 04 | `novel_<proj>_world` | |
 | 3 主轴 | 05 → Q7 → Q7R → 05a → Q8 → Q8R，随后 05b → Q9 → Q9R（每幕一次），再 18（`post_05b`） | Claude: `novel_<proj>_arc`；所有幕次骨架共用 Claude: `novel_<proj>_arc_act` | Q7R/Q8R/Q9R 是门禁重构步骤，会覆盖对应主轴/幕次/骨架产物；Q8R 后调 `extract_act_count_from_macro_model` 拿幕数；05b 全部跑完调 `extract_all_chapter_counts` 拿每幕章节数和总章节数，并写回 `.project_info.json` |
-| 4 开篇 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 → 09 → Q1 → Q2 → Q3 → 10 | Codex: `novel_<proj>_opening`; Claude: `novel_<proj>_drafting_claude` | act_num=1；09/Q2 走 Claude 正文会话，其余走 Codex；10 之后 `extract_and_create_story_summary(1)` |
-| 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → Q3 → 15 → 16（每轮一轮） | Codex: `novel_<proj>_round_<n>`; Claude: `novel_<proj>_drafting_claude` | 第一幕章节数 -1 次（开篇已用掉一章），其余幕 `act_chapters` 次；14/Q2 走同一个 Claude 正文会话，其余走 Codex，16 紧跟 15 后在同一 round session 内执行 |
+| 4 开篇 | Q10 → 06 → 07 → Q4 → Q5 → Q6 → 08 → 09 → Q1 → Q2 → 10 | Codex: `novel_<proj>_opening`; Claude: `novel_<proj>_drafting_claude` | act_num=1；09/Q2 走 Claude 正文会话，其余走 Codex；10 之后 `extract_and_create_story_summary(1)` |
+| 创作循环 | Q10 → 11 → 12 → Q4 → Q5 → Q6 → 13 → 14 → Q1 → Q2 → 15 → 16（每轮一轮） | Codex: `novel_<proj>_round_<n>`; Claude: `novel_<proj>_drafting_claude` | 第一幕章节数 -1 次（开篇已用掉一章），其余幕 `act_chapters` 次；14/Q2 走同一个 Claude 正文会话，其余走 Codex，16 紧跟 15 后在同一 round session 内执行 |
 | 幕末 | 17，随后 18（`post_17`） | `novel_<proj>_act_<n>` | act 循环结束后跑一次；17 后用同一 act 会话刷新 `projects/<name>/CLAUDE.md`，最后 `sync_summary_to_state` 写回末轮状态文档 |
 
 > 模板目录里另有 `steps/04a 更新人物档案与人物关系.md` 和 `steps/00 进阶提示技术.md` 两份文件，但都不在 `run_workflow.py loop` 的主循环里——前者是手动按需增量更新人物 JSON 的工具步骤，后者是早期探索残留；如要把它们纳入 `STEP_FILES` / `STEP_FILE_MAP` 需同步改两处。`steps/18 项目级 CLAUDE.md.md` 由 `run_workflow.py` 在 05b / 17 后**自动**调用（不需要用户在 `loop` 阶段手动触发），失败仅打印警告不阻断流程。
